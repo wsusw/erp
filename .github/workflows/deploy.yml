@@ -1,0 +1,38 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:   # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd /srv/erp
+
+            # 拉取最新代码
+            git pull origin main
+
+            # 安装/更新 Python 依赖
+            /srv/erp/venv/bin/pip install -r requirements.txt
+
+            # 重启服务
+            sudo systemctl restart erp
+
+            # 等待服务就绪
+            sleep 3
+            systemctl is-active --quiet erp && echo "✓ 服务启动成功" || echo "✗ 服务启动失败"
