@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% set page_title = '工作台' %}
+{% block content %}
+<section class="hero-card">
+  <div>
+    <h2>欢迎，{{ current_user.display_name }}</h2>
+    <p>这里汇总当前权限范围内的门店任务、审批、确认、打款与流转记录。</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('tasks') }}">进入任务池</a>
+</section>
+
+<div class="stats-grid">
+  <div class="stat-card"><span class="stat-icon blue">☷</span><small>可见任务</small><strong>{{ stats.total }}</strong></div>
+  <div class="stat-card"><span class="stat-icon green">✓</span><small>已完成</small><strong>{{ stats.completed }}</strong></div>
+  <div class="stat-card"><span class="stat-icon orange">!</span><small>待审核</small><strong>{{ stats.pending_audit }}</strong></div>
+  <div class="stat-card"><span class="stat-icon red">⏱</span><small>逾期未完成</small><strong>{{ stats.overdue }}</strong></div>
+  <div class="stat-card"><span class="stat-icon orange">¥</span><small>价格待批</small><strong>{{ stats.price_pending }}</strong></div>
+  <div class="stat-card"><span class="stat-icon orange">↗</span><small>路费待批</small><strong>{{ stats.travel_pending }}</strong></div>
+  <div class="stat-card"><span class="stat-icon blue">¥</span><small>打款总价</small><strong>¥{{ '%.2f'|format(stats.total_payment) }}</strong></div>
+  {% if current_user.role == 'super_admin' %}
+  <div class="stat-card"><span class="stat-icon blue">◇</span><small>代理总价</small><strong>¥{{ '%.2f'|format(stats.agency_total or 0) }}</strong></div>
+  {% endif %}
+</div>
+
+<div class="two-col">
+  <section class="card">
+    <div class="card-head">
+      <h3>近期任务</h3>
+      <a href="{{ url_for('tasks') }}">查看全部</a>
+    </div>
+    <div class="apple-list">
+      {% for t in tasks %}
+      <a class="list-row" href="{{ url_for('task_detail', task_id=t.id) }}">
+        <div>
+          <strong>{{ t.store_name }}</strong>
+          <small>{{ t.code }} · {{ t.project.project_name }}</small>
+        </div>
+        <div class="row-right">
+          <span class="tag {{ 'red' if t.is_overdue else 'blue' }}">{{ t.task_status }}</span>
+          <span>¥{{ '%.2f'|format(t.final_payment_price) }}</span>
+        </div>
+      </a>
+      {% else %}
+      <div class="empty">暂无任务</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h3>门店流转记录</h3><a href="{{ url_for('export_flows') }}">导出</a></div>
+    <div class="timeline">
+      {% for f in recent_flows %}
+      <div class="timeline-item">
+        <span></span>
+        <div>
+          <strong>{{ f.action }}</strong>
+          <small>{{ f.created_at.strftime('%Y-%m-%d %H:%M') }} · {{ f.operator_name }} · {{ f.task.store_name }}</small>
+          <p>{{ f.after_text }}</p>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty">暂无流转记录</div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

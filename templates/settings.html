@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% set page_title = '账号设置' %}
+{% block content %}
+<section class="card compact">
+  <div class="card-head"><h3>常用驳回理由</h3><span class="muted">用于任务审核、价格审批、路费审批时快速填充，也可手动自定义。</span></div>
+  <form method="post" class="grid-form">
+    <div><label>类型</label><select name="category">{% for c in REJECT_CATEGORIES %}<option>{{ c }}</option>{% endfor %}</select></div>
+    <div class="span-2"><label>理由内容</label><input name="content" required placeholder="例如：截图不清晰，请重新上传"></div>
+    <div class="right"><button class="btn primary">添加理由</button></div>
+  </form>
+</section>
+<section class="card compact">
+  <div class="card-head"><h3>我的理由库</h3></div>
+  <div class="apple-list">
+    {% for r in reasons %}
+    <div class="list-row">
+      <div><strong>{{ r.content }}</strong><small>{{ r.category }} · {{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</small></div>
+      <form method="post" action="{{ url_for('delete_reject_reason', reason_id=r.id) }}" onsubmit="return confirm('确定删除这条常用理由吗？')"><button class="btn danger small-btn">删除</button></form>
+    </div>
+    {% else %}<div class="empty">暂无常用理由</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

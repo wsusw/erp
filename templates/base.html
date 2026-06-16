@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title or '先锋探店 ERP' }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+{% if current_user.is_authenticated %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="先锋探店"></div>
+      <div>
+        <div class="brand-title">ERP 后台</div>
+        <div class="brand-subtitle">门店派发管控系统</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span>⌂</span>工作台</a>
+      <a class="nav-item {% if request.endpoint in ['tasks', 'task_detail'] %}active{% endif %}" href="{{ url_for('tasks') }}"><span>☷</span>门店任务</a>
+      {% if current_user.role in ['super_admin', 'supervisor'] %}
+      <a class="nav-item {% if request.endpoint == 'projects' %}active{% endif %}" href="{{ url_for('projects') }}"><span>◌</span>项目管理</a>
+      <a class="nav-item {% if request.endpoint == 'employees' %}active{% endif %}" href="{{ url_for('employees') }}"><span>♙</span>人员管理</a>
+      {% endif %}
+      {% if current_user.role == 'super_admin' %}
+      <a class="nav-item {% if request.endpoint == 'users' %}active{% endif %}" href="{{ url_for('users') }}"><span>☉</span>账号权限</a>
+      {% endif %}
+      <a class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}" href="{{ url_for('reports') }}"><span>▥</span>统计报表</a>
+      <a class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}"><span>⚙</span>账号设置</a>
+    </nav>
+    <div class="user-panel">
+      <div class="avatar">{{ current_user.display_name[:1] }}</div>
+      <div class="user-meta">
+        <div class="user-name">{{ current_user.display_name }}</div>
+        <div class="user-role">{{ current_user.role_label }}</div>
+      </div>
+      <a class="logout" href="{{ url_for('logout') }}">退出</a>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <div class="breadcrumb">先锋探店 · 门店派发管控系统</div>
+        <h1>{{ page_title or '工作台' }}</h1>
+      </div>
+      <div class="topbar-right">
+        <span id="clock" class="clock"></span>
+        <span class="role-pill">{{ current_user.role_label }}</span>
+      </div>
+    </header>
+    {% include '_flash.html' %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+{% include '_flash.html' %}
+{% block anon_content %}{% endblock %}
+{% endif %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

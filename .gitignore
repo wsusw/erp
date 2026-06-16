@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# uv (Python package manager) cache
+.uv-cache/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+erp_course.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE settings (optional, adjust as needed)
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node / npm
+node_modules/
+
+# 内部需求文档（不提交）
+*需求.md
+UI设计建议.md
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

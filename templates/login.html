@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block anon_content %}
+<div class="login-page">
+  <div class="login-box">
+    <div class="login-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="先锋探店"></div>
+    <h1>先锋探店</h1>
+    <p>ERP 后台管理系统</p>
+    <form method="post" class="login-form">
+      <label>登录账号</label>
+      <input name="username" required placeholder="请输入账号" autocomplete="username">
+      <label>登录密码</label>
+      <input type="password" name="password" required placeholder="请输入密码" autocomplete="current-password">
+      <button type="submit" class="btn primary full">登录</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

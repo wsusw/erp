@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% set page_title = '账号权限' %}
+{% block content %}
+<section class="card compact">
+  <div class="card-head"><h3>创建账号</h3></div>
+  <form method="post" class="grid-form">
+    <div><label>账号名</label><input name="username" required autocomplete="off"></div>
+    <div><label>初始密码</label><input type="password" name="password" required autocomplete="new-password"></div>
+    <div><label>角色</label><select name="role"><option value="operator">业务运营</option><option value="supervisor">主管</option><option value="super_admin">超级管理员</option></select></div>
+    <div><label>绑定人员</label><select name="employee_id"><option value="">不绑定</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.name }} · {{ e.position }}</option>{% endfor %}</select></div>
+    <div class="right"><button class="btn primary">创建账号</button></div>
+  </form>
+</section>
+<section class="card compact">
+  <div class="card-head"><h3>账号列表</h3></div>
+  <table class="data-table"><thead><tr><th>账号</th><th>绑定人员</th><th>角色</th><th>状态</th><th>重置密码</th><th>启停</th></tr></thead><tbody>
+    {% for u in users %}<tr><td><strong>{{ u.username }}</strong><small>{{ u.created_at.strftime('%Y-%m-%d') }}</small></td><td>{{ u.display_name }}</td><td><span class="tag blue">{{ u.role_label }}</span></td><td>{{ '启用' if u.is_active else '禁用' }}</td><td><form method="post" action="{{ url_for('reset_password', user_id=u.id) }}" class="inline-form"><input type="password" name="password" placeholder="新密码"><button class="btn ghost">重置</button></form></td><td><form method="post" action="{{ url_for('toggle_user', user_id=u.id) }}"><button class="btn {{ 'danger' if u.is_active else 'primary' }}">{{ '禁用' if u.is_active else '启用' }}</button></form></td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

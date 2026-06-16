@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+{% set page_title = '任务详情 · ' ~ task.store_name %}
+{% block content %}
+<div class="detail-header">
+  <div>
+    <div class="detail-kicker">{{ task.code }} · {{ task.project.project_name }}</div>
+    <h2>{{ task.store_name }}</h2>
+    <p>{{ task.address }}</p>
+  </div>
+  <div class="detail-actions">
+    {% if current_user.role in ['supervisor','operator'] and task.task_status in ['待主管承接','待运营承接'] %}
+    <form method="post" action="{{ url_for('accept_task', task_id=task.id) }}"><button class="btn primary">确认承接</button></form>
+    {% endif %}
+    <a class="btn ghost" href="{{ url_for('tasks') }}">返回任务池</a>
+  </div>
+</div>
+
+<div class="stats-grid small">
+  <div class="stat-card"><small>任务状态</small><strong>{{ task.task_status }}</strong></div>
+  <div class="stat-card"><small>剩余天数</small><strong>{{ task.countdown }} 天</strong></div>
+  <div class="stat-card"><small>系统打款价</small><strong>¥{{ '%.2f'|format(task.final_payment_price) }}</strong></div>
+  {% if current_user.role == 'super_admin' %}<div class="stat-card"><small>代理价</small><strong>¥{{ '%.2f'|format(task.agency_price or 0) }}</strong></div>{% endif %}
+  <div class="stat-card"><small>第三方确认</small><strong>{{ task.confirmation_status }}</strong></div>
+</div>
+
+<div class="detail-grid">
+  <section class="card">
+    <div class="card-head"><h3>1. 门店档案</h3></div>
+    <form method="post" action="{{ url_for('update_task_basic', task_id=task.id) }}" class="grid-form two">
+      <div><label>项目</label><select name="project_id" {% if current_user.role == 'operator' %}disabled{% endif %}>{% for p in projects %}<option value="{{ p.id }}" {% if p.id == task.project_id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select>{% if current_user.role == 'operator' %}<input type="hidden" name="project_id" value="{{ task.project_id }}">{% endif %}</div>
+      <div><label>门店名称</label><input name="store_name" value="{{ task.store_name }}"></div>
+      <div><label>区域</label><input name="region" value="{{ task.region }}"></div>
+      <div><label>紧急度</label><select name="urgency"><option {% if task.urgency=='一般' %}selected{% endif %}>一般</option><option {% if task.urgency=='紧急' %}selected{% endif %}>紧急</option></select></div>
+      <div><label>开始时间</label><input type="date" name="start_time" value="{{ task.start_time.strftime('%Y-%m-%d') }}"></div>
+      <div><label>截止时间</label><input type="date" name="end_time" value="{{ task.end_time.strftime('%Y-%m-%d') }}"></div>
+      <div class="span-2"><label>地址</label><input name="address" value="{{ task.address }}"></div>
+      {% if current_user.role in ['super_admin','supervisor'] %}<div><label>打款基准价</label><input type="number" step="0.01" name="payment_base_price" value="{{ task.payment_base_price }}"></div>{% endif %}
+      {% if current_user.role == 'super_admin' %}<div><label>代理价（仅超管）</label><input type="number" step="0.01" name="agency_price" value="{{ task.agency_price or '' }}"></div>{% endif %}
+      <div class="span-2"><label>备注</label><textarea name="store_remarks" rows="3">{{ task.store_remarks }}</textarea></div>
+      <div class="span-2 right"><button class="btn primary">保存基础信息</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h3>2. 指派与状态</h3></div>
+    {% if current_user.role in ['super_admin','supervisor'] %}
+    <form method="post" action="{{ url_for('assign_task', task_id=task.id) }}" class="grid-form two">
+      {% if current_user.role == 'super_admin' %}<div><label>主管</label><select name="supervisor_id"><option value="">未分配</option>{% for e in supervisors %}<option value="{{ e.id }}" {% if task.supervisor_id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select></div>{% endif %}
+      <div><label>运营</label><select name="operator_id"><option value="">未分配</option>{% for e in operators %}<option value="{{ e.id }}" {% if task.operator_id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select></div>
+      <div><label>任务状态</label><select name="task_status">{% for s in TASK_STATUSES %}<option value="{{ s }}" {% if task.task_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+      <div class="span-2 right"><button class="btn primary">保存分配/状态</button></div>
+    </form>
+    {% else %}
+    <div class="kv"><span>主管</span><strong>{{ task.supervisor.name if task.supervisor else '未分配' }}</strong></div>
+    <div class="kv"><span>运营</span><strong>{{ task.operator.name if task.operator else '未分配' }}</strong></div>
+    {% endif %}
+    <div class="kv"><span>打款状态</span><strong>{{ task.payment_status }}</strong></div>
+    {% if current_user.role in ['super_admin','supervisor'] %}
+    <form method="post" action="{{ url_for('update_payment_status', task_id=task.id) }}" class="inline-form">
+      <select name="payment_status"><option {% if task.payment_status=='待打款' %}selected{% endif %}>待打款</option><option {% if task.payment_status=='打款中' %}selected{% endif %}>打款中</option><option {% if task.payment_status=='已打款' %}selected{% endif %}>已打款</option></select>
+      <button class="btn ghost">更新打款状态</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+
+<div class="detail-grid">
+  <section class="card wide">
+    <div class="card-head"><h3>3. SOP 指引</h3><span class="muted">运营仅可查看，超管/主管可编辑；支持文字、图片、视频、字号、颜色、加粗、缩进、对齐。</span></div>
+    {% if current_user.role in ['super_admin','supervisor'] %}
+    <form method="post" action="{{ url_for('update_sop', task_id=task.id) }}" enctype="multipart/form-data" onsubmit="syncRichEditor('sopEditor','sopHtml')">
+      <div class="rich-toolbar">
+        <button type="button" onclick="richCmd('bold')"><b>B</b></button>
+        <button type="button" onclick="richCmd('italic')"><i>I</i></button>
+        <button type="button" onclick="richCmd('insertUnorderedList')">列表</button>
+        <button type="button" onclick="richCmd('justifyLeft')">左对齐</button>
+        <button type="button" onclick="richCmd('justifyCenter')">居中</button>
+        <button type="button" onclick="richCmd('justifyRight')">右对齐</button>
+        <select onchange="richCmd('fontSize', this.value)"><option value="">字号</option><option value="2">小</option><option value="3">正文</option><option value="5">大标题</option></select>
+        <input type="color" title="文字颜色" onchange="richCmd('foreColor', this.value)">
+        <button type="button" onclick="insertRichLink('image')">插入图片链接</button>
+        <button type="button" onclick="insertRichLink('video')">插入视频链接</button>
+      </div>
+      <div id="sopEditor" class="rich-editor" contenteditable="true">{{ task.task_sop_html|safe }}</div>
+      <textarea id="sopHtml" class="hidden" name="task_sop_html">{{ task.task_sop_html }}</textarea>
+      <div class="grid-form two mt-12">
+        <div><label>上传并追加 SOP 图片/视频</label><input type="file" name="sop_media" accept="image/*,video/mp4,video/quicktime"></div>
+        <div class="right"><button class="btn primary">保存 SOP</button></div>
+      </div>
+      <div class="tip">保存后系统自动写入门店流转记录。插入外部链接时，请使用可访问的图片或视频 URL。</div>
+    </form>
+    {% else %}
+    <div class="sop-view">{{ task.task_sop_html|safe }}</div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h3>4. 第三方确认闭环</h3><a href="{{ url_for('export_confirmations') }}">导出确认记录</a></div>
+    <p class="muted">可发起确认、复制专属链接、标记已发送、重新生成链接；第三方选择“已执行已提交”必须上传 APP 提交成功截图，提交后不可修改。</p>
+
+    {% if current_user.role in ['super_admin','supervisor','operator'] %}
+    <div class="inline-form wrap mb-10">
+      <form method="post" action="{{ url_for('start_confirmation', task_id=task.id) }}"><button class="btn primary">发起门店执行确认</button></form>
+      <button type="button" class="btn ghost" onclick="copyField('confirmationLink')">复制确认链接</button>
+      {% if current_user.role in ['super_admin','supervisor'] %}<form method="post" action="{{ url_for('regenerate_confirmation', task_id=task.id) }}" onsubmit="return confirm('重新生成后旧确认链接将立即作废，且会清空第三方已提交的确认材料。确定继续吗？')"><button class="btn danger">重新生成链接</button></form>{% endif %}
+    </div>
+    {% endif %}
+
+    <label>专属确认链接</label>
+    <input id="confirmationLink" readonly value="{{ url_for('confirm_execution', token=task.confirmation_token, _external=True) }}" onclick="this.select()">
+
+    <div class="kv"><span>发起时间</span><strong>{{ task.confirmation_started_at.strftime('%Y-%m-%d %H:%M') if task.confirmation_started_at else '未发起' }}</strong></div>
+    <div class="kv"><span>发送对象</span><strong>{{ task.confirmation_sent_to or '未标记发送' }}</strong></div>
+    <div class="kv"><span>发送时间</span><strong>{{ task.confirmation_sent_at.strftime('%Y-%m-%d %H:%M') if task.confirmation_sent_at else '未发送' }}</strong></div>
+    <div class="kv"><span>确认状态</span><strong>{{ task.confirmation_status }}</strong></div>
+    <div class="kv"><span>提交时间</span><strong>{{ task.confirmation_submitted_at.strftime('%Y-%m-%d %H:%M') if task.confirmation_submitted_at else '未提交' }}</strong></div>
+    <div class="kv"><span>截图核对</span><strong>{{ task.confirmation_review_status or '未发起' }}</strong></div>
+
+    {% if current_user.role in ['super_admin','supervisor','operator'] %}
+    <form method="post" action="{{ url_for('mark_confirmation_sent', task_id=task.id) }}" class="grid-form two mini-form">
+      <div><label>发送给</label><input name="sent_to" value="{{ task.confirmation_sent_to }}" placeholder="神秘顾客姓名/手机号/微信"></div>
+      <div><label>发送备注</label><input name="sent_note" value="{{ task.confirmation_sent_note }}" placeholder="例如：已微信发送给张三"></div>
+      <div class="span-2 right"><button class="btn ghost">标记已发送</button></div>
+    </form>
+    {% endif %}
+
+    {% if task.confirmation_note %}<p class="note-box">第三方说明：{{ task.confirmation_note }}</p>{% endif %}
+    {% if task.confirmation_screenshot %}<a class="btn ghost" target="_blank" href="{{ url_for('uploaded_file', filename=task.confirmation_screenshot) }}">查看确认截图</a>{% endif %}
+
+    {% if current_user.role in ['super_admin','supervisor'] and task.confirmation_status == '已执行已提交' and task.confirmation_screenshot %}
+    <form method="post" action="{{ url_for('review_confirmation', task_id=task.id) }}" class="review-form mt-12">
+      <select name="decision"><option value="pass">截图核对通过</option><option value="reject">截图核对驳回</option></select>
+      <select onchange="fillComment(this, 'confirm_review_note')"><option value="">选择常用理由</option>{% for rr in reject_reasons if rr.category in ['门店确认','其他'] %}<option value="{{ rr.content }}">{{ rr.content }}</option>{% endfor %}</select>
+      <input id="confirm_review_note" name="review_note" placeholder="核对意见/驳回理由" value="{{ task.confirmation_review_note }}">
+      <button class="btn primary">保存核对结果</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+
+<div class="detail-grid">
+  <section class="card">
+    <div class="card-head"><h3>5. 执行人和收款人信息</h3></div>
+    <form method="post" action="{{ url_for('update_executor_payee', task_id=task.id) }}" class="grid-form two">
+      <div><label>执行人姓名</label><input name="executor_name" value="{{ task.executor_name }}"></div>
+      <div><label>执行人手机号</label><input name="executor_phone" value="{{ task.executor_phone }}"></div>
+      <div><label>收款人姓名</label><input name="payee_name" value="{{ task.payee_name }}"></div>
+      <div><label>收款人手机号</label><input name="payee_phone" value="{{ task.payee_phone }}"></div>
+      <div><label>开户行</label><input name="payee_bank" value="{{ task.payee_bank }}"></div>
+      <div><label>银行卡/收款账号</label><input name="payee_account" value="{{ task.payee_account }}"></div>
+      <div class="span-2"><label>执行备注</label><textarea name="executor_remarks" rows="3">{{ task.executor_remarks }}</textarea></div>
+      <div class="span-2 right"><button class="btn primary">保存执行/收款档案</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h3>6. 神秘顾客管理</h3></div>
+    <form method="post" action="{{ url_for('add_shopper', task_id=task.id) }}" class="grid-form two">
+      <div><label>姓名</label><input name="name"></div>
+      <div><label>手机号</label><input name="phone"></div>
+      <div><label>状态</label><select name="status"><option>待执行</option><option>已执行待提交</option><option>放弃执行</option><option>已完成</option></select></div>
+      <div><label>身份备注</label><input name="identity_note"></div>
+      <div class="span-2 right"><button class="btn primary">添加顾客</button></div>
+    </form>
+    <div class="apple-list compact-list">
+      {% for s in task.mystery_shoppers %}
+      <div class="list-card">
+        <div class="list-card-head"><strong>{{ s.name }}</strong><span class="tag blue">{{ s.status }}</span></div>
+        <small>{{ s.phone }} · {{ s.identity_note }}</small>
+        <form method="post" action="{{ url_for('update_shopper', shopper_id=s.id) }}" class="review-form mt-8">
+          <input name="name" value="{{ s.name }}" required>
+          <input name="phone" value="{{ s.phone }}" placeholder="手机号">
+          <select name="status"><option {% if s.status=='待执行' %}selected{% endif %}>待执行</option><option {% if s.status=='已执行待提交' %}selected{% endif %}>已执行待提交</option><option {% if s.status=='放弃执行' %}selected{% endif %}>放弃执行</option><option {% if s.status=='已完成' %}selected{% endif %}>已完成</option></select>
+          <input name="identity_note" value="{{ s.identity_note }}" placeholder="身份备注">
+          <button class="btn ghost">保存</button>
+        </form>
+        <form method="post" action="{{ url_for('delete_shopper', shopper_id=s.id) }}" onsubmit="return confirm('确定删除该神秘顾客档案吗？')" class="right mt-8"><button class="btn danger">删除</button></form>
+      </div>
+      {% else %}<div class="empty">暂无神秘顾客档案</div>{% endfor %}
+    </div>
+  </section>
+</div>
+
+<div class="detail-grid">
+  <section class="card">
+    <div class="card-head"><h3>7. 任务结果提交与审核</h3></div>
+    {% if current_user.role in ['operator','supervisor','super_admin'] and task.task_status in ['待运营承接','进行中','已退回'] %}
+    <form method="post" action="{{ url_for('submit_result', task_id=task.id) }}" enctype="multipart/form-data" class="grid-form two">
+      <div class="span-2"><label>问题清单</label><textarea name="problem_list" rows="3" placeholder="如无问题可填写：无"></textarea></div>
+      <div class="span-2"><label>执行说明</label><textarea name="result_description" rows="4" placeholder="记录核查过程、神秘顾客反馈、门店情况"></textarea></div>
+      <div><label>截图/附件</label><input type="file" name="screenshot"></div>
+      <div class="right"><button class="btn primary">提交结果</button></div>
+    </form>
+    {% else %}
+    <p class="muted">当前状态为“{{ task.task_status }}”，不允许提交新的执行结果，避免已完结或待审核任务状态倒退。</p>
+    {% endif %}
+    {% if current_user.role in ['operator','supervisor','super_admin'] and task.task_status not in ['已完成','放弃执行'] %}
+    <form method="post" action="{{ url_for('abandon_task', task_id=task.id) }}" class="inline-form wrap mt-12" onsubmit="return confirm('确定将该任务标记为放弃执行吗？')">
+      <input name="reason" placeholder="放弃执行原因，例如：神秘顾客临时退出/门店无法执行" required>
+      <button class="btn danger">标记放弃执行</button>
+    </form>
+    {% endif %}
+    <div class="apple-list compact-list">
+      {% for r in task.results %}
+      <div class="list-card">
+        <div class="list-card-head"><strong>结果 #{{ r.id }}</strong><span class="tag {{ 'green' if r.status=='已通过' else ('red' if r.status in ['已退回','异常上报'] else 'orange') }}">{{ r.status }}</span></div>
+        <p>{{ r.result_description }}</p><small>问题：{{ r.problem_list }} · 提交人：{{ r.submitter.display_name }} · {{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+        {% if r.screenshot_path %}<p><a href="{{ url_for('uploaded_file', filename=r.screenshot_path) }}" target="_blank">查看附件</a></p>{% endif %}
+        {% if current_user.role in ['super_admin','supervisor'] and r.status == '待审核' %}
+        <form method="post" action="{{ url_for('review_result', result_id=r.id) }}" class="review-form">
+          <select name="decision"><option value="pass">通过并完成</option><option value="return">退回补充</option><option value="abnormal">上报异常</option></select>
+          <select onchange="fillComment(this, 'review_comment_{{ r.id }}')"><option value="">选择常用理由</option>{% for rr in reject_reasons if rr.category in ['任务审核','其他'] %}<option value="{{ rr.content }}">{{ rr.content }}</option>{% endfor %}</select>
+          <input id="review_comment_{{ r.id }}" name="review_comment" placeholder="审核意见/驳回理由/异常说明">
+          <button class="btn primary">提交审核</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}<div class="empty">暂无任务结果</div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h3>8. 价格调整审批</h3></div>
+    <form method="post" action="{{ url_for('create_price_adjustment', task_id=task.id) }}" class="inline-form wrap">
+      <input type="number" step="0.01" name="amount_change" placeholder="增减金额，如 8 或 -5" required>
+      <input name="reason" placeholder="调整原因" required>
+      <button class="btn primary">提交价格调整</button>
+    </form>
+    <div class="tip">规则：减价无需审批；加价 &lt;5 自动通过；5-10 主管审批；&gt;10 主管通过后超管终审。</div>
+    <div class="apple-list compact-list">
+      {% for p in task.price_adjustments %}
+      <div class="list-card">
+        <div class="list-card-head"><strong>{{ '+' if p.amount_change>0 else '' }}{{ p.amount_change }} 元</strong><span class="tag orange">{{ p.status }}</span></div>
+        <p>{{ p.reason }}</p><small>{{ p.applicant.display_name }} · {{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+        {% if (current_user.role == 'supervisor' and p.status == '待主管审批') or (current_user.role == 'super_admin' and p.status in ['待主管审批','主管已通过待超管审批']) %}
+        <form method="post" action="{{ url_for('review_price', pa_id=p.id) }}" class="review-form">
+          <select name="decision"><option value="approve">同意</option><option value="reject">驳回</option></select>
+          <select onchange="fillComment(this, 'price_comment_{{ p.id }}')"><option value="">选择常用理由</option>{% for rr in reject_reasons if rr.category in ['价格调整','其他'] %}<option value="{{ rr.content }}">{{ rr.content }}</option>{% endfor %}</select>
+          <input id="price_comment_{{ p.id }}" name="comment" placeholder="审批意见/驳回理由">
+          <button class="btn primary">处理</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}<div class="empty">暂无价格调整申请</div>{% endfor %}
+    </div>
+  </section>
+</div>
+
+<div class="detail-grid">
+  <section class="card">
+    <div class="card-head"><h3>9. 路费补贴审批</h3></div>
+    <form method="post" action="{{ url_for('create_travel', task_id=task.id) }}" enctype="multipart/form-data" class="grid-form two">
+      <div><label>申请金额</label><input type="number" step="0.01" name="amount" required></div>
+      <div><label>凭证</label><input type="file" name="voucher"></div>
+      <div class="span-2"><label>申请原因</label><input name="reason" required></div>
+      <div class="span-2 right"><button class="btn primary">提交路费补贴</button></div>
+    </form>
+    <div class="tip">规则：15 元以内含 15 由主管审批；15 元以上由超管终审；所有审批写入门店流转记录。</div>
+    <div class="apple-list compact-list">
+      {% for s in task.travel_subsidies %}
+      <div class="list-card">
+        <div class="list-card-head"><strong>¥{{ '%.2f'|format(s.amount) }}</strong><span class="tag orange">{{ s.status }}</span></div>
+        <p>{{ s.reason }}</p><small>{{ s.applicant.display_name }} · {{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+        {% if s.voucher_path %}<p><a href="{{ url_for('uploaded_file', filename=s.voucher_path) }}" target="_blank">查看凭证</a></p>{% endif %}
+        {% if (current_user.role == 'supervisor' and s.status == '待主管审批') or (current_user.role == 'super_admin' and s.status in ['待主管审批','主管已通过待超管审批']) %}
+        <form method="post" action="{{ url_for('review_travel', subsidy_id=s.id) }}" class="review-form">
+          <select name="decision"><option value="approve">同意</option><option value="reject">驳回</option></select>
+          <select onchange="fillComment(this, 'travel_comment_{{ s.id }}')"><option value="">选择常用理由</option>{% for rr in reject_reasons if rr.category in ['路费补贴','其他'] %}<option value="{{ rr.content }}">{{ rr.content }}</option>{% endfor %}</select>
+          <input id="travel_comment_{{ s.id }}" name="comment" placeholder="审批意见/驳回理由">
+          <button class="btn primary">处理</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}<div class="empty">暂无路费补贴申请</div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h3>10. 门店流转记录</h3><a href="{{ url_for('export_flows') }}">导出全部</a></div>
+    <div class="timeline tall">
+      {% for f in task.flow_records %}
+      <div class="timeline-item"><span></span><div><strong>{{ f.action }}</strong><small>{{ f.created_at.strftime('%Y-%m-%d %H:%M') }} · {{ f.operator_name }}</small>{% if f.before_text %}<p>前：{{ f.before_text }}</p>{% endif %}{% if f.after_text %}<p>后：{{ f.after_text }}</p>{% endif %}</div></div>
+      {% else %}<div class="empty">暂无流转记录</div>{% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

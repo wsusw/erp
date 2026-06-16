@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>门店执行确认 - {{ task.store_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="confirm-body">
+{% include '_flash.html' %}
+<div class="confirm-card">
+  <div class="login-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="先锋探店"></div>
+  <h1>门店执行确认</h1>
+  <p class="muted">{{ task.store_name }} · {{ task.address }}</p>
+  <div class="confirm-info">
+    <div><span>工单号</span><strong>{{ task.code }}</strong></div>
+    <div><span>任务截止</span><strong>{{ task.end_time }}</strong></div>
+    <div><span>当前状态</span><strong>{{ task.confirmation_status }}</strong></div>
+  </div>
+  {% if task.confirmation_submitted_at %}
+    <div class="success-box">已提交，提交时间：{{ task.confirmation_submitted_at.strftime('%Y-%m-%d %H:%M') }}。提交后不可修改。</div>
+    <p>{{ task.confirmation_note }}</p>
+    {% if task.confirmation_screenshot %}<a class="btn ghost full" target="_blank" href="{{ url_for('confirm_screenshot_file', token=task.confirmation_token) }}">查看已提交截图</a>{% endif %}
+  {% else %}
+    <form method="post" enctype="multipart/form-data" class="confirm-form" onsubmit="return validateConfirmationForm()">
+      <label>请选择执行状态</label>
+      <select name="confirmation_status" id="confirmation_status" required onchange="toggleConfirmWarning()">
+        <option value="">请选择</option>
+        <option>已执行待提交</option>
+        <option>待执行</option>
+        <option>放弃执行</option>
+        <option>已执行已提交</option>
+      </select>
+      <div id="confirmWarning" class="warning-box hidden">请确保截屏清晰可辨，截屏需包含 APP 端报告提交成功的关键信息，提交后将无法修改，请谨慎操作。</div>
+      <label>执行说明</label>
+      <textarea name="confirmation_note" rows="4" placeholder="请填写门店执行情况、遇到的问题或放弃原因"></textarea>
+      <label>APP 提交成功截图</label>
+      <input id="confirmation_screenshot" type="file" name="confirmation_screenshot" accept="image/*">
+      <button class="btn primary full">确认提交</button>
+    </form>
+  {% endif %}
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% set page_title = '门店任务' %}
+{% block content %}
+{% if current_user.role in ['super_admin','supervisor'] %}
+<section class="card compact">
+  <div class="card-head">
+    <h3>新建门店任务</h3>
+    <div class="head-actions">
+      <a class="btn ghost" href="{{ url_for('task_import_template') }}">下载导入模板</a>
+      <button class="btn ghost" type="button" onclick="toggleBox('importBox')">批量导入</button>
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('create_task') }}" class="grid-form">
+    <div><label>项目</label><select name="project_id" required>{% for p in projects %}<option value="{{ p.id }}">{{ p.project_name }}</option>{% endfor %}</select></div>
+    <div><label>门店名称</label><input name="store_name" required placeholder="例如：南京西路店"></div>
+    <div><label>区域</label><input name="region" placeholder="例如：华东一区"></div>
+    <div><label>紧急度</label><select name="urgency"><option>一般</option><option>紧急</option></select></div>
+    <div><label>开始时间</label><input type="date" name="start_time" required></div>
+    <div><label>截止时间</label><input type="date" name="end_time" required></div>
+    <div class="span-2"><label>详细地址</label><input name="address" placeholder="门店详细地址"></div>
+    <div><label>打款基准价</label><input type="number" step="0.01" name="payment_base_price" value="0"></div>
+    {% if current_user.role == 'super_admin' %}<div><label>代理价（仅超管可见）</label><input type="number" step="0.01" name="agency_price"></div>{% endif %}
+    {% if current_user.role == 'super_admin' %}
+    <div><label>指派主管</label><select name="supervisor_id"><option value="">暂不指派</option>{% for e in supervisors %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
+    {% endif %}
+    {% if current_user.role in ['super_admin', 'supervisor'] %}
+    <div><label>指派运营</label><select name="operator_id"><option value="">暂不指派</option>{% for e in operators %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
+    {% endif %}
+    <div class="span-2"><label>门店备注</label><input name="store_remarks" placeholder="内部备注"></div>
+    <div class="span-4"><label>SOP 内容（支持 HTML / 富文本粘贴）</label><textarea name="task_sop_html" rows="3" placeholder="填写本次暗访任务 SOP"></textarea></div>
+    <div class="span-4 right"><button class="btn primary" type="submit">生成门店任务</button></div>
+  </form>
+
+  <form id="importBox" class="hidden import-box" method="post" action="{{ url_for('import_tasks') }}" enctype="multipart/form-data">
+    <label>选择 CSV 文件</label>
+    <input type="file" name="csv_file" accept=".csv" required>
+    <button class="btn primary" type="submit">开始导入</button>
+  </form>
+</section>
+{% else %}
+<section class="card compact">
+  <div class="card-head"><h3>我的任务池</h3></div>
+  <p class="muted">运营账号按照需求文档仅承接主管指派的暗访任务，不能主动新建门店任务。如需新增任务，请联系主管或超级管理员。</p>
+</section>
+{% endif %}
+
+<section class="card compact">
+  <div class="card-head"><h3>精准筛选</h3><a class="btn ghost" href="{{ url_for('export_tasks', **request.args) }}">导出当前结果</a></div>
+  <form method="get" class="filter-form">
+    <input name="q" value="{{ request.args.get('q','') }}" placeholder="门店 / 地址 / 区域 / 工单号">
+    <select name="status"><option value="">全部状态</option>{% for s in TASK_STATUSES %}<option value="{{ s }}" {% if request.args.get('status')==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+    <select name="urgency"><option value="">全部紧急度</option><option {% if request.args.get('urgency')=='一般' %}selected{% endif %}>一般</option><option {% if request.args.get('urgency')=='紧急' %}selected{% endif %}>紧急</option></select>
+    <input type="date" name="date_from" value="{{ request.args.get('date_from','') }}">
+    <input type="date" name="date_to" value="{{ request.args.get('date_to','') }}">
+    <input type="number" step="0.01" name="min_price" value="{{ request.args.get('min_price','') }}" placeholder="最低打款价">
+    <input type="number" step="0.01" name="max_price" value="{{ request.args.get('max_price','') }}" placeholder="最高打款价">
+    <button class="btn primary" type="submit">筛选</button>
+  </form>
+</section>
+
+<form method="post" action="{{ url_for('batch_update_tasks') }}" class="card compact">
+  <div class="card-head">
+    <h3>门店任务池</h3>
+    {% if current_user.role in ['super_admin','supervisor'] %}<button class="btn ghost" type="button" onclick="toggleBox('batchBox')">批量设置</button>{% endif %}
+  </div>
+  {% if current_user.role in ['super_admin','supervisor'] %}
+  <div id="batchBox" class="hidden batch-box">
+    <select name="batch_urgency"><option value="">不改紧急度</option><option>一般</option><option>紧急</option></select>
+    <input type="date" name="batch_start_time" placeholder="开始时间">
+    <input type="date" name="batch_end_time" placeholder="截止时间">
+    <select name="batch_operator_id"><option value="">不改运营</option>{% for e in operators %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select>
+    <button class="btn primary" type="submit">确认批量更新</button>
+  </div>
+  {% endif %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr>
+        {% if current_user.role in ['super_admin','supervisor'] %}<th><input type="checkbox" onclick="checkAll(this)"></th>{% endif %}
+        <th>工单/门店</th><th>时间</th><th>负责人</th><th>状态</th><th>打款价</th>{% if current_user.role == 'super_admin' %}<th>代理价</th>{% endif %}<th>第三方确认</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for t in tasks %}
+        <tr>
+          {% if current_user.role in ['super_admin','supervisor'] %}<td><input type="checkbox" name="task_ids" value="{{ t.id }}"></td>{% endif %}
+          <td><strong>{{ t.store_name }}</strong><small>{{ t.code }} · {{ t.project.project_name }} · {{ t.address }}</small></td>
+          <td>{{ t.start_time }} ~ {{ t.end_time }}<small>剩余 {{ t.countdown }} 天{% if t.is_overdue %} · 已逾期{% endif %}</small></td>
+          <td><small>主管：{{ t.supervisor.name if t.supervisor else '未分配' }}</small><small>运营：{{ t.operator.name if t.operator else '未分配' }}</small></td>
+          <td><span class="tag {{ 'green' if t.task_status == '已完成' else ('red' if t.is_overdue else 'blue') }}">{{ t.task_status }}</span><small>{{ t.audit_status }}</small></td>
+          <td>¥{{ '%.2f'|format(t.final_payment_price) }}<small>基准 {{ t.payment_base_price }} + 加价 {{ t.approved_extra_price }}</small></td>
+          {% if current_user.role == 'super_admin' %}<td>{{ '¥%.2f'|format(t.agency_price or 0) }}</td>{% endif %}
+          <td><span class="tag orange">{{ t.confirmation_status }}</span></td>
+          <td><a class="round-action" href="{{ url_for('task_detail', task_id=t.id) }}">···</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="empty">没有符合条件的任务</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+{% endblock %}

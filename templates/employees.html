@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% set page_title = '人员管理' %}
+{% block content %}
+{% if current_user.role in ['super_admin','supervisor'] %}
+<section class="card compact">
+  <div class="card-head"><h3>{{ '新增分管运营人员' if current_user.role == 'supervisor' else '新增人员档案' }}</h3></div>
+  <form method="post" class="grid-form">
+    <div><label>姓名</label><input name="name" required></div>
+    <div><label>手机号</label><input name="phone"></div>
+    {% if current_user.role == 'super_admin' %}
+    <div><label>岗位</label><input name="position" placeholder="超管/主管/运营"></div>
+    <div><label>直属主管</label><select name="supervisor_id"><option value="">无</option>{% for s in supervisors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    {% else %}
+    <div><label>岗位</label><input value="运营" disabled><small>主管只能新增自己的分管运营人员</small></div>
+    {% endif %}
+    <div><label>月度应完成任务数</label><input type="number" name="monthly_target" value="30"></div>
+    <div class="right"><button class="btn primary">创建人员</button></div>
+  </form>
+</section>
+{% endif %}
+<section class="card compact">
+  <div class="card-head"><h3>人员列表</h3></div>
+  <table class="data-table"><thead><tr><th>人员</th><th>账号/角色</th><th>直属主管</th><th>月度目标</th><th>操作</th></tr></thead><tbody>
+    {% for e in employees %}<tr><td><strong>{{ e.name }}</strong><small>{{ e.phone }} · {{ e.position }}</small></td><td><span class="tag blue">{{ e.role_label }}</span><small>{{ e.account_status }}</small></td><td>{{ e.supervisor.name if e.supervisor else '-' }}</td><td>{{ e.monthly_target }}</td><td><form method="post" action="{{ url_for('update_employee_target', emp_id=e.id) }}" class="inline-form"><input type="number" name="monthly_target" value="{{ e.monthly_target }}"><button class="btn ghost">更新目标</button></form></td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

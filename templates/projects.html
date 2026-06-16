@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% set page_title = '项目管理' %}
+{% block content %}
+<section class="card compact">
+  <div class="card-head"><h3>新增项目</h3></div>
+  <form method="post" class="grid-form">
+    <div><label>项目名称</label><input name="project_name" required></div>
+    <div class="span-2"><label>项目说明</label><input name="description"></div>
+    <div class="right"><button class="btn primary">创建项目</button></div>
+  </form>
+</section>
+<section class="card compact">
+  <div class="card-head"><h3>项目列表</h3></div>
+  <table class="data-table"><thead><tr><th>项目</th><th>说明</th><th>打款状态</th><th>任务数</th><th>操作</th></tr></thead><tbody>
+    {% for p in projects %}<tr><td><strong>{{ p.project_name }}</strong><small>{{ p.created_at.strftime('%Y-%m-%d') }}</small></td><td>{{ p.description }}</td><td><span class="tag blue">{{ p.payment_status }}</span></td><td>{{ p.tasks|length }}</td><td><form method="post" action="{{ url_for('update_project_payment', project_id=p.id) }}" class="inline-form"><select name="payment_status"><option {% if p.payment_status=='待打款' %}selected{% endif %}>待打款</option><option {% if p.payment_status=='打款中' %}selected{% endif %}>打款中</option><option {% if p.payment_status=='已打款' %}selected{% endif %}>已打款</option></select><button class="btn ghost">更新</button></form></td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}
