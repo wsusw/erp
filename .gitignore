@@ -35,9 +35,11 @@ erp_course.db
 # Node / npm
 node_modules/
 
-# 内部需求文档（不提交）
-*需求.md
-UI设计建议.md
+# Markdown 文件（仅允许 README）
+*.md
+!README.md
+!readme.md
+!Readme.md
 
 # OS generated files
 .DS_Store
