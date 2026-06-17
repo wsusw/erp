@@ -15,7 +15,7 @@ from flask_login import (
     LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 )
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, event
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -39,7 +39,9 @@ app.config["SECRET_KEY"] = os.environ.get("ERP_SECRET_KEY", "xf-erp-dev-secret-c
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URL", "sqlite:///" + os.path.join(BASE_DIR, "xf_erp.db")
 )
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'connect_args': {'check_same_thread': False}
+}
 app.config["UPLOAD_FOLDER"] = UPLOAD_DIR
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
 
@@ -72,6 +74,16 @@ REJECT_CATEGORIES = ["任务审核", "价格调整", "路费补贴", "门店确�
 
 
 db = SQLAlchemy(app)
+
+def _set_sqlite_pragma(connection, _connection_record):
+    cursor = connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    cursor.execute("PRAGMA synchronous=NORMAL;")
+    cursor.execute("PRAGMA cache_size=-8000;")
+    cursor.close()
+
+with app.app_context():
+    event.listen(db.engine, "connect", _set_sqlite_pragma)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 login_manager.login_message = "请先登录系统"
