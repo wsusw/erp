@@ -11,7 +11,6 @@
     </div>
   </div>
   <form method="post" action="{{ url_for('create_task') }}" class="grid-form">
-    <div><label>项目</label><select name="project_id" required>{% for p in projects %}<option value="{{ p.id }}">{{ p.project_name }}</option>{% endfor %}</select></div>
     <div><label>门店名称</label><input name="store_name" required placeholder="例如：南京西路店"></div>
     <div><label>区域</label><input name="region" placeholder="例如：华东一区"></div>
     <div><label>紧急度</label><select name="urgency"><option>一般</option><option>紧急</option></select></div>
@@ -20,7 +19,7 @@
     <div class="span-2"><label>详细地址</label><input name="address" placeholder="门店详细地址"></div>
     <div><label>打款基准价</label><input type="number" step="0.01" name="payment_base_price" value="0"></div>
     {% if current_user.role == 'super_admin' %}<div><label>代理价（仅超管可见）</label><input type="number" step="0.01" name="agency_price"></div>{% endif %}
-    {% if current_user.role == 'super_admin' %}
+    {% if current_user.role in ['super_admin','supervisor'] %}
     <div><label>指派主管</label><select name="supervisor_id"><option value="">暂不指派</option>{% for e in supervisors %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
     {% endif %}
     {% if current_user.role in ['super_admin', 'supervisor'] %}
@@ -82,14 +81,25 @@
       {% for t in tasks %}
         <tr>
           {% if current_user.role in ['super_admin','supervisor'] %}<td><input type="checkbox" name="task_ids" value="{{ t.id }}"></td>{% endif %}
-          <td><strong>{{ t.store_name }}</strong><small>{{ t.code }} · {{ t.project.project_name }} · {{ t.address }}</small></td>
+          <td><strong>{{ t.store_name }}</strong><small>{{ t.code }} · {{ t.address }}</small></td>
           <td>{{ t.start_time }} ~ {{ t.end_time }}<small>剩余 {{ t.countdown }} 天{% if t.is_overdue %} · 已逾期{% endif %}</small></td>
           <td><small>主管：{{ t.supervisor.name if t.supervisor else '未分配' }}</small><small>运营：{{ t.operator.name if t.operator else '未分配' }}</small></td>
           <td><span class="tag {{ 'green' if t.task_status == '已完成' else ('red' if t.is_overdue else 'blue') }}">{{ t.task_status }}</span><small>{{ t.audit_status }}</small></td>
           <td>¥{{ '%.2f'|format(t.final_payment_price) }}<small>基准 {{ t.payment_base_price }} + 加价 {{ t.approved_extra_price }}</small></td>
           {% if current_user.role == 'super_admin' %}<td>{{ '¥%.2f'|format(t.agency_price or 0) }}</td>{% endif %}
           <td><span class="tag orange">{{ t.confirmation_status }}</span></td>
-          <td><a class="round-action" href="{{ url_for('task_detail', task_id=t.id) }}">···</a></td>
+          <td class="row-actions">
+            <a class="round-action" href="{{ url_for('task_detail', task_id=t.id) }}" title="查看详情">···</a>
+            {% if current_user.role in ['super_admin','supervisor'] and t.task_status not in ['已完成','放弃执行','已作废'] %}
+            <button class="round-action danger-action" type="submit"
+                    formaction="{{ url_for('void_task', task_id=t.id) }}"
+                    formmethod="post"
+                    name="void_reason"
+                    value="任务池手动作废"
+                    title="作废任务"
+                    onclick="return confirm('确认作废该门店任务？作废后任务池、统计、导出中将不再显示，但数据库和流转记录会保留。');">×</button>
+            {% endif %}
+          </td>
         </tr>
       {% else %}
         <tr><td colspan="9" class="empty">没有符合条件的任务</td></tr>

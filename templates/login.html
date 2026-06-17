@@ -2,7 +2,7 @@
 {% block anon_content %}
 <div class="login-page">
   <div class="login-box">
-    <div class="login-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="先锋探店"></div>
+    <div class="login-logo"><img src="{{ url_for('static', filename='logo.png') }}?v=20260617" alt="先锋探店" onerror="this.style.display='none'; this.parentElement.classList.add('logo-missing');"></div>
     <h1>先锋探店</h1>
     <p>ERP 后台管理系统</p>
     <form method="post" class="login-form">
@@ -12,6 +12,9 @@
       <input type="password" name="password" required placeholder="请输入密码" autocomplete="current-password">
       <button type="submit" class="btn primary full">登录</button>
     </form>
+    <div class="login-help">
+      初始账号：admin / admin123；supervisor / supervisor123；operator / operator123
+    </div>
   </div>
 </div>
 {% endblock %}

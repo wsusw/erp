@@ -86,7 +86,7 @@ def main():
 
     r = client.post(
         "/tasks/create",
-        data={"project_id": 1, "store_name": "日期错误门店", "start_time": "2026-02-10", "end_time": "2026-02-01"},
+        data={"store_name": "日期错误门店", "start_time": "2026-02-10", "end_time": "2026-02-01"},
         follow_redirects=True,
     )
     assert_ok("截止时间不能早于开始时间".encode("utf-8") in r.data, "任务创建日期校验生效")
@@ -122,7 +122,7 @@ def main():
     assert_ok(r.status_code == 200 and "已记录确认链接发送信息".encode("utf-8") in r.data, "运营可标记确认链接已发送")
     r = client.post(
         "/tasks/create",
-        data={"project_id": 1, "store_name": "运营越权建单", "start_time": "2026-01-01", "end_time": "2026-01-02"},
+        data={"store_name": "运营越权建单", "start_time": "2026-01-01", "end_time": "2026-01-02"},
         follow_redirects=True,
     )
     assert_ok("当前账号没有权限执行该操作".encode("utf-8") in r.data, "运营账号不能主动新建任务")
@@ -148,7 +148,25 @@ def main():
     r = client.get("/tasks")
     assert_ok(b"min_agency" not in r.data and b"max_agency" not in r.data, "任务筛选区不显示代理价格筛选字段")
 
-    csv_with_agency = "project_id,store_name,region,address,urgency,start_time,end_time,payment_base_price,agency_price,supervisor_id,operator_id,store_remarks,task_sop_html\n1,代理价导入门店,华东,地址,一般,2026-01-01,2026-01-02,50,88.88,,,,<p>SOP</p>\n"
+    r = client.post(
+        "/tasks/create",
+        data={"store_name": "待作废门店", "start_time": "2026-01-01", "end_time": "2026-01-02", "payment_base_price": "50"},
+        follow_redirects=True,
+    )
+    assert_ok(r.status_code == 200, "超管可创建待作废测试任务")
+    with app.app_context():
+        void_task_obj = Task.query.filter_by(store_name="待作废门店").first()
+        assert_ok(void_task_obj is not None, "待作废任务已入库")
+        void_task_id = void_task_obj.id
+    r = client.post(f"/tasks/{void_task_id}/void", data={"void_reason": "自检作废"}, follow_redirects=True)
+    assert_ok(r.status_code == 200 and "门店任务已作废".encode("utf-8") in r.data, "超管可作废任务而非物理删除")
+    with app.app_context():
+        void_task_obj = db.session.get(Task, void_task_id)
+        assert_ok(void_task_obj is not None and void_task_obj.is_voided and void_task_obj.task_status == "已作废", "作废任务数据库保留并标记作废")
+    r = client.get("/tasks")
+    assert_ok("待作废门店".encode("utf-8") not in r.data, "作废任务不再显示于任务池")
+
+    csv_with_agency = "store_name,region,address,urgency,start_time,end_time,payment_base_price,agency_price,supervisor_id,operator_id,store_remarks,task_sop_html\n代理价导入门店,华东,地址,一般,2026-01-01,2026-01-02,50,88.88,,,,<p>SOP</p>\n"
     r = client.post(
         "/tasks/import",
         data={"csv_file": (BytesIO(csv_with_agency.encode("utf-8-sig")), "agency_tasks.csv")},
@@ -160,7 +178,7 @@ def main():
         t = Task.query.filter_by(store_name="代理价导入门店").first()
         assert_ok(t is not None and abs((t.agency_price or 0) - 88.88) < 0.01, "代理价格已随批量导入写入任务")
 
-    csv_text = "project_id,store_name,region,address,urgency,start_time,end_time,payment_base_price,supervisor_id,operator_id,store_remarks,task_sop_html\n1,导入门店A,华东,地址,一般,2026-01-01,2026-01-02,50,,,,<p>SOP</p>\n1,导入门店B,华东,地址,一般,2026-02-10,2026-02-01,50,,,,<p>SOP</p>\n"
+    csv_text = "store_name,region,address,urgency,start_time,end_time,payment_base_price,supervisor_id,operator_id,store_remarks,task_sop_html\n导入门店A,华东,地址,一般,2026-01-01,2026-01-02,50,,,,<p>SOP</p>\n导入门店B,华东,地址,一般,2026-02-10,2026-02-01,50,,,,<p>SOP</p>\n"
     r = client.post(
         "/tasks/import",
         data={"csv_file": (BytesIO(csv_text.encode("utf-8-sig")), "tasks.csv")},
@@ -169,7 +187,7 @@ def main():
     )
     assert_ok(r.status_code == 200 and "失败".encode("utf-8") in r.data, "批量导入成功/失败反馈生效")
 
-    csv_bad_price = "project_id,store_name,region,address,urgency,start_time,end_time,payment_base_price,supervisor_id,operator_id,store_remarks,task_sop_html\n1,零元脏数据门店,华东,地址,一般,2026-01-01,2026-01-02,abc,,,,<p>SOP</p>\n"
+    csv_bad_price = "store_name,region,address,urgency,start_time,end_time,payment_base_price,supervisor_id,operator_id,store_remarks,task_sop_html\n零元脏数据门店,华东,地址,一般,2026-01-01,2026-01-02,abc,,,,<p>SOP</p>\n"
     r = client.post(
         "/tasks/import",
         data={"csv_file": (BytesIO(csv_bad_price.encode("utf-8-sig")), "bad_price.csv")},

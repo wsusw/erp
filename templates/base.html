@@ -11,7 +11,7 @@
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="先锋探店"></div>
+      <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}?v=20260617" alt="先锋探店" onerror="this.style.display='none'; this.parentElement.classList.add('logo-missing');"></div>
       <div>
         <div class="brand-title">ERP 后台</div>
         <div class="brand-subtitle">门店派发管控系统</div>
@@ -21,7 +21,6 @@
       <a class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span>⌂</span>工作台</a>
       <a class="nav-item {% if request.endpoint in ['tasks', 'task_detail'] %}active{% endif %}" href="{{ url_for('tasks') }}"><span>☷</span>门店任务</a>
       {% if current_user.role in ['super_admin', 'supervisor'] %}
-      <a class="nav-item {% if request.endpoint == 'projects' %}active{% endif %}" href="{{ url_for('projects') }}"><span>◌</span>项目管理</a>
       <a class="nav-item {% if request.endpoint == 'employees' %}active{% endif %}" href="{{ url_for('employees') }}"><span>♙</span>人员管理</a>
       {% endif %}
       {% if current_user.role == 'super_admin' %}
