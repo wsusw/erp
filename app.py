@@ -3,7 +3,7 @@ import io
 import os
 import secrets
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from functools import wraps
 from typing import Optional
 
@@ -58,7 +58,7 @@ ROLE_LABELS = {
 }
 
 TASK_STATUSES = [
-    "待主管承接", "待主管分配", "待运营承接", "进行中", "待主管审核", "已完成", "已退回", "异常上报", "放弃执行"
+    "待主管承接", "待主管分配", "待运营承接", "进行中", "待主管审核", "已完成", "已退回", "异常上报", "放弃执行", "已作废"
 ]
 
 CONFIRMATION_STATUSES = ["未确认", "已执行待提交", "待执行", "放弃执行", "已执行已提交"]
@@ -151,7 +151,7 @@ class Project(db.Model):
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=True, index=True)
     creator_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     supervisor_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=True, index=True)
     operator_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=True, index=True)
@@ -202,8 +202,15 @@ class Task(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now, index=True)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
+    # 任务作废采用软删除：任务池、统计、导出默认不显示，但数据库和流转记录保留。
+    is_voided = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    voided_at = db.Column(db.DateTime, nullable=True)
+    voided_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    void_reason = db.Column(db.Text, default="")
+
     project = db.relationship("Project", backref="tasks")
     creator = db.relationship("User", foreign_keys=[creator_id])
+    voider = db.relationship("User", foreign_keys=[voided_by_id])
     supervisor = db.relationship("Employee", foreign_keys=[supervisor_id])
     operator = db.relationship("Employee", foreign_keys=[operator_id])
 
@@ -220,7 +227,7 @@ class Task(db.Model):
 
     @property
     def is_overdue(self) -> bool:
-        return self.end_time < date.today() and self.task_status != "已完成"
+        return (not self.is_voided) and self.end_time < date.today() and self.task_status != "已完成"
 
 
 class MysteryShopper(db.Model):
@@ -332,10 +339,38 @@ def load_user(user_id):
 
 
 def parse_date(value: str, default: Optional[date] = None) -> Optional[date]:
-    if not value:
+    """兼容网页日期、Excel/WPS CSV 日期、中文日期和 Excel 日期序列号。"""
+    if value is None:
         return default
-    normalized = value.strip().replace("/", "-")
-    return datetime.strptime(normalized, "%Y-%m-%d").date()
+
+    raw = str(value).strip().strip("'\"")
+    if not raw:
+        return default
+
+    # Excel/WPS 可能把日期保存成序列号，例如 46290。
+    if re.fullmatch(r"\d+(\.0+)?", raw):
+        serial = int(float(raw))
+        if 20000 <= serial <= 80000:
+            return date(1899, 12, 30) + timedelta(days=serial)
+
+    normalized = (
+        raw.replace("年", "-")
+           .replace("月", "-")
+           .replace("日", "")
+           .replace("/", "-")
+           .replace(".", "-")
+           .strip()
+    )
+    normalized = normalized.split(" ")[0].strip()
+
+    parts = normalized.split("-")
+    if len(parts) == 3:
+        try:
+            return date(int(parts[0]), int(parts[1]), int(parts[2]))
+        except ValueError:
+            pass
+
+    raise ValueError("日期格式不正确")
 
 
 def dates_are_valid(start_value: str, end_value: str):
@@ -344,15 +379,20 @@ def dates_are_valid(start_value: str, end_value: str):
         start = parse_date(start_value, date.today())
         end = parse_date(end_value, date.today())
     except (TypeError, ValueError):
-        return None, None, "日期格式不正确，请使用系统日期选择器重新选择。"
+        return None, None, "日期格式不正确，请填写 2026-06-17、2026/06/17 或 2026年6月17日。"
     if end < start:
         return None, None, "截止时间不能早于开始时间。"
     return start, end, ""
 
 
+def clean_money_text(value: str) -> str:
+    return (value or "").strip().replace("￥", "").replace("¥", "").replace("元", "").replace(",", "").strip()
+
+
 def parse_float(value: str, default: float = 0.0) -> float:
     try:
-        return float(value) if value not in (None, "") else default
+        raw = clean_money_text(value)
+        return float(raw) if raw not in (None, "") else default
     except ValueError:
         return default
 
@@ -367,13 +407,13 @@ def has_invalid_text(value: str) -> bool:
 
 def parse_required_positive_float(value: str, field_label: str):
     """导入场景专用：金额字段必须存在、必须是数字、必须大于 0。"""
-    raw = (value or "").strip()
+    raw = clean_money_text(value)
     if not raw:
         return None, f"{field_label}不能为空"
     try:
         amount = float(raw)
     except ValueError:
-        return None, f"{field_label}格式错误，必须是数字"
+        return None, f"{field_label}格式错误，请填写纯数字，例如 50 或 50.00"
     if amount <= 0:
         return None, f"{field_label}必须大于 0"
     return amount, ""
@@ -396,8 +436,10 @@ def current_employee_id() -> Optional[int]:
 
 
 def visible_tasks_query():
-    """按角色返回可见任务。越权问题优先在后端解决，前端只做辅助隐藏。"""
-    q = Task.query
+    """按角色返回可见任务。越权问题优先在后端解决，前端只做辅助隐藏。
+    已作废任务默认从任务池、统计、导出中隐藏，但数据库和流转记录保留。
+    """
+    q = Task.query.filter(Task.is_voided.is_(False))
     if current_user.role == "super_admin":
         return q
     if current_user.role == "supervisor":
@@ -551,7 +593,7 @@ def calculate_monthly_completion(month_str: str):
         operators = Employee.query.join(User, User.employee_id == Employee.id).filter(User.role == "operator").order_by(Employee.name.asc()).all()
     rows = []
     for emp in operators:
-        q = Task.query.filter(Task.operator_id == emp.id, Task.end_time >= start, Task.end_time < end)
+        q = Task.query.filter(Task.is_voided.is_(False), Task.operator_id == emp.id, Task.end_time >= start, Task.end_time < end)
         assigned = q.count()
         completed = q.filter(Task.task_status == "已完成").count()
         target = emp.monthly_target if emp.monthly_target is not None else 0
@@ -601,7 +643,6 @@ def seed_data():
 
     task = Task(
         code=f"XF{utc_now().strftime('%Y%m%d%H%M%S')}",
-        project_id=p1.id,
         creator_id=admin.id,
         supervisor_id=supervisor_emp.id,
         operator_id=operator_emp.id,
@@ -657,6 +698,14 @@ def ensure_sqlite_columns():
         ddl.append("ALTER TABLE task ADD COLUMN confirmation_reviewed_by INTEGER")
     if "confirmation_reviewed_at" not in existing:
         ddl.append("ALTER TABLE task ADD COLUMN confirmation_reviewed_at DATETIME")
+    if "is_voided" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN is_voided BOOLEAN DEFAULT 0 NOT NULL")
+    if "voided_at" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN voided_at DATETIME")
+    if "voided_by_id" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN voided_by_id INTEGER")
+    if "void_reason" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN void_reason TEXT DEFAULT ''")
     for sql in ddl:
         db.session.execute(db.text(sql))
     if ddl:
@@ -754,10 +803,9 @@ def tasks():
 @login_required
 @role_required("super_admin", "supervisor")
 def create_task():
-    project_id = request.form.get("project_id")
     store_name = request.form.get("store_name", "").strip()
-    if not project_id or not store_name:
-        flash("❌ 项目和门店名称不能为空", "danger")
+    if not store_name:
+        flash("❌ 门店名称不能为空", "danger")
         return redirect(url_for("tasks"))
 
     supervisor_id = request.form.get("supervisor_id") or None
@@ -776,7 +824,6 @@ def create_task():
 
     task = Task(
         code=f"XF{utc_now().strftime('%Y%m%d%H%M%S')}{secrets.token_hex(2).upper()}",
-        project_id=int(project_id),
         creator_id=current_user.id,
         supervisor_id=int(supervisor_id) if supervisor_id else None,
         operator_id=int(operator_id) if operator_id else None,
@@ -798,7 +845,7 @@ def create_task():
         task.audit_status = "待主管审核"
     db.session.add(task)
     db.session.flush()
-    add_flow(task, "新建门店任务", after=f"门店：{task.store_name}；项目：{task.project.project_name}；状态：{task.task_status}")
+    add_flow(task, "新建门店任务", after=f"门店：{task.store_name}；状态：{task.task_status}")
     log_operation("任务管理", "新建任务", f"新建 {task.code} - {task.store_name}")
     db.session.commit()
     flash("✅ 门店任务已创建", "success")
@@ -832,7 +879,6 @@ def update_task_basic(task_id):
     if not can_manage_task(task):
         abort(403)
     before = f"{task.store_name} / {task.address} / {task.start_time}~{task.end_time} / 基准价{task.payment_base_price}"
-    task.project_id = int(request.form.get("project_id", task.project_id))
     task.store_name = request.form.get("store_name", task.store_name).strip()
     task.region = request.form.get("region", task.region).strip()
     task.address = request.form.get("address", task.address).strip()
@@ -971,6 +1017,48 @@ def update_payment_status(task_id):
     db.session.commit()
     flash("✅ 打款状态已更新", "success")
     return redirect(url_for("task_detail", task_id=task.id))
+
+
+@app.route("/tasks/<int:task_id>/void", methods=["POST"])
+@login_required
+@role_required("super_admin", "supervisor")
+def void_task(task_id):
+    """作废门店任务。
+
+    规则：
+    - 超管可作废所有未完结门店任务；
+    - 主管只可作废自己分管范围内的未完结门店任务；
+    - 运营不可作废；
+    - 不做物理删除，作废后从任务池、统计、导出中隐藏，原始数据、审批、确认、流转记录仍保留。
+    """
+    task = Task.query.get_or_404(task_id)
+
+    if current_user.role == "supervisor" and not can_access_task(task):
+        flash("❌ 只能作废自己分管范围内的门店任务", "danger")
+        return redirect(url_for("tasks"))
+
+    if task.is_voided:
+        flash("❌ 该任务已作废，无需重复操作", "danger")
+        return redirect(url_for("tasks"))
+
+    if task.task_status in ["已完成", "放弃执行", "已作废"]:
+        flash("❌ 已完结任务不能作废", "danger")
+        return redirect(url_for("task_detail", task_id=task.id))
+
+    reason = request.form.get("void_reason", "").strip() or "任务池手动作废"
+    before = f"状态：{task.task_status}；审核：{task.audit_status}；门店：{task.store_name}"
+    task.is_voided = True
+    task.voided_at = utc_now()
+    task.voided_by_id = current_user.id
+    task.void_reason = reason
+    task.task_status = "已作废"
+    task.audit_status = "已作废"
+
+    add_flow(task, "作废门店任务", before=before, after=f"已作废；原因：{reason}")
+    log_operation("门店任务", "作废任务", f"{task.code} / {task.store_name} / 原因：{reason}")
+    db.session.commit()
+    flash("✅ 门店任务已作废，任务池将不再显示；原始记录和流转记录已保留", "success")
+    return redirect(url_for("tasks"))
 
 
 # ============================================================
@@ -1397,7 +1485,7 @@ def confirm_execution(token):
     db.create_all()
     ensure_sqlite_columns()
     seed_data()
-    task = Task.query.filter_by(confirmation_token=token).first_or_404()
+    task = Task.query.filter_by(confirmation_token=token, is_voided=False).first_or_404()
     if request.method == "POST":
         ip = request.remote_addr or "unknown"
         if confirmation_rate_limit_exceeded(ip):
@@ -1435,7 +1523,7 @@ def confirm_execution(token):
 
 @app.route("/confirm/<token>/screenshot")
 def confirm_screenshot_file(token):
-    task = Task.query.filter_by(confirmation_token=token).first_or_404()
+    task = Task.query.filter_by(confirmation_token=token, is_voided=False).first_or_404()
     if not task.confirmation_screenshot:
         abort(404)
     return send_from_directory(app.config["UPLOAD_FOLDER"], task.confirmation_screenshot)
@@ -1622,9 +1710,10 @@ def delete_reject_reason(reason_id):
 # ============================================================
 @app.route("/tasks/template")
 @login_required
+@role_required("super_admin", "supervisor")
 def task_import_template():
-    headers = ["project_id", "store_name", "region", "address", "urgency", "start_time", "end_time", "payment_base_price", "agency_price", "supervisor_id", "operator_id", "store_remarks", "task_sop_html"]
-    rows = [["1", "示例门店", "华东一区", "上海市示例路100号", "一般", date.today().strftime("%Y-%m-%d"), date.today().strftime("%Y-%m-%d"), "50", "80", "", "", "备注", "<p>到店执行 SOP</p>"]]
+    headers = ["store_name", "region", "address", "urgency", "start_time", "end_time", "payment_base_price", "agency_price", "supervisor_id", "operator_id", "store_remarks", "task_sop_html"]
+    rows = [["示例门店-请删除本行", "华东一区", "上海市示例路100号", "一般", date.today().strftime("%Y-%m-%d"), date.today().strftime("%Y-%m-%d"), "50", "80", "", "", "备注", "<p>到店执行 SOP</p>"]]
     return export_csv("task_import_template.csv", headers, rows)
 
 
@@ -1638,19 +1727,20 @@ def import_tasks():
         return redirect(url_for("tasks"))
     raw = file.read()
     text = None
-    for encoding in ("utf-8-sig", "utf-8", "gbk", "gb18030", "latin-1"):
+    for enc in ["utf-8-sig", "utf-8", "gb18030", "gbk"]:
         try:
-            text = raw.decode(encoding)
+            text = raw.decode(enc)
             break
         except UnicodeDecodeError:
-            continue
+            pass
     if text is None:
-        flash("❌ 文件编码无法识别，请使用 UTF-8 CSV 模板导入", "danger")
+        flash("❌ 文件编码无法识别，请使用 UTF-8 或 Excel/WPS 常见 CSV 格式导入", "danger")
         return redirect(url_for("tasks"))
     reader = csv.DictReader(io.StringIO(text))
-    required_headers = {"project_id", "store_name", "start_time", "end_time"}
-    if not reader.fieldnames or not required_headers.issubset(set(reader.fieldnames)):
-        flash("❌ 导入文件缺少必要字段：project_id、store_name、start_time、end_time", "danger")
+    required_headers = {"store_name", "start_time", "end_time", "payment_base_price"}
+    clean_headers = {(h or "").strip().replace("\ufeff", "") for h in (reader.fieldnames or [])}
+    if not reader.fieldnames or not required_headers.issubset(clean_headers):
+        flash("❌ 导入文件缺少必要字段：store_name、start_time、end_time、payment_base_price", "danger")
         return redirect(url_for("tasks"))
     count = 0
     failed = []
@@ -1660,6 +1750,9 @@ def import_tasks():
             skipped += 1
             continue
         store_name = (row.get("store_name") or "").strip()
+        if store_name in ["示例门店", "示例门店-请删除本行"]:
+            skipped += 1
+            continue
         if not store_name:
             failed.append(f"第 {line_no} 行：门店名称为空")
             continue
@@ -1694,19 +1787,11 @@ def import_tasks():
                 if agency_price is None or agency_price < 0:
                     failed.append(f"第 {line_no} 行：代理价格格式错误或不能为负数")
                     continue
-        try:
-            project_id = int(row.get("project_id") or 1)
-            if not Project.query.get(project_id):
-                raise ValueError("项目不存在")
-        except Exception:
-            failed.append(f"第 {line_no} 行：project_id 无效或项目不存在")
-            continue
         supervisor_id = row.get("supervisor_id") or (current_employee_id() if current_user.role == "supervisor" else None)
         operator_id = row.get("operator_id") or None
         try:
             task = Task(
                 code=f"XF{utc_now().strftime('%Y%m%d%H%M%S')}{secrets.token_hex(2).upper()}",
-                project_id=project_id,
                 creator_id=current_user.id,
                 supervisor_id=int(supervisor_id) if supervisor_id else None,
                 operator_id=int(operator_id) if operator_id else None,
@@ -1758,7 +1843,7 @@ def batch_update_tasks():
             flash(f"❌ {date_error}", "danger")
             return redirect(url_for("tasks"))
     updated = 0
-    for task in Task.query.filter(Task.id.in_([int(x) for x in ids])).all():
+    for task in Task.query.filter(Task.is_voided.is_(False), Task.id.in_([int(x) for x in ids])).all():
         if not can_access_task(task):
             continue
         before = f"紧急度：{task.urgency}；时间：{task.start_time}~{task.end_time}；运营：{task.operator.name if task.operator else '无'}"
@@ -1785,7 +1870,7 @@ def export_tasks():
     rows = []
     for t in apply_task_filters(visible_tasks_query()).order_by(Task.created_at.desc()).all():
         row = [
-            t.code, t.project.project_name, t.store_name, t.region, t.address, t.urgency,
+            t.code, t.store_name, t.region, t.address, t.urgency,
             t.start_time, t.end_time, t.countdown, t.task_status, t.audit_status,
             t.supervisor.name if t.supervisor else "", t.operator.name if t.operator else "",
             t.payment_base_price, t.approved_extra_price, t.final_payment_price,
@@ -1794,7 +1879,7 @@ def export_tasks():
             row.append(t.agency_price or "")
         row.extend([t.executor_name, t.executor_phone, t.payee_name, t.payee_phone, t.payee_bank, t.payee_account, t.confirmation_status])
         rows.append(row)
-    headers = ["工单号", "项目", "门店", "区域", "地址", "紧急度", "开始", "截止", "倒计时", "任务状态", "审核状态", "主管", "运营", "基准价", "已通过加价", "打款价"]
+    headers = ["工单号", "门店", "区域", "地址", "紧急度", "开始", "截止", "倒计时", "任务状态", "审核状态", "主管", "运营", "基准价", "已通过加价", "打款价"]
     if current_user.role == "super_admin":
         headers.append("代理价")
     headers.extend(["执行人", "执行人手机号", "收款人", "收款人手机号", "开户行", "收款账号", "第三方确认状态"])

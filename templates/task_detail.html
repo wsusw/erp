@@ -3,13 +3,19 @@
 {% block content %}
 <div class="detail-header">
   <div>
-    <div class="detail-kicker">{{ task.code }} · {{ task.project.project_name }}</div>
+    <div class="detail-kicker">{{ task.code }}</div>
     <h2>{{ task.store_name }}</h2>
     <p>{{ task.address }}</p>
   </div>
   <div class="detail-actions">
     {% if current_user.role in ['supervisor','operator'] and task.task_status in ['待主管承接','待运营承接'] %}
     <form method="post" action="{{ url_for('accept_task', task_id=task.id) }}"><button class="btn primary">确认承接</button></form>
+    {% endif %}
+    {% if current_user.role in ['super_admin','supervisor'] and task.task_status not in ['已完成','放弃执行','已作废'] %}
+    <form method="post" action="{{ url_for('void_task', task_id=task.id) }}" class="inline-form" onsubmit="return confirm('确认作废该门店任务？作废后任务池、统计、导出中将不再显示，但数据库和流转记录会保留。');">
+      <input name="void_reason" placeholder="作废原因" required style="min-width:180px">
+      <button class="btn danger">作废任务</button>
+    </form>
     {% endif %}
     <a class="btn ghost" href="{{ url_for('tasks') }}">返回任务池</a>
   </div>
@@ -27,7 +33,6 @@
   <section class="card">
     <div class="card-head"><h3>1. 门店档案</h3></div>
     <form method="post" action="{{ url_for('update_task_basic', task_id=task.id) }}" class="grid-form two">
-      <div><label>项目</label><select name="project_id" {% if current_user.role == 'operator' %}disabled{% endif %}>{% for p in projects %}<option value="{{ p.id }}" {% if p.id == task.project_id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select>{% if current_user.role == 'operator' %}<input type="hidden" name="project_id" value="{{ task.project_id }}">{% endif %}</div>
       <div><label>门店名称</label><input name="store_name" value="{{ task.store_name }}"></div>
       <div><label>区域</label><input name="region" value="{{ task.region }}"></div>
       <div><label>紧急度</label><select name="urgency"><option {% if task.urgency=='一般' %}selected{% endif %}>一般</option><option {% if task.urgency=='紧急' %}selected{% endif %}>紧急</option></select></div>
