@@ -1790,8 +1790,16 @@ def import_tasks():
         supervisor_id = row.get("supervisor_id") or (current_employee_id() if current_user.role == "supervisor" else None)
         operator_id = row.get("operator_id") or None
         try:
+            raw_pid = (row.get("project_id") or "").strip()
+            project_id = int(raw_pid) if raw_pid else 1
+            if not Project.query.get(project_id):
+                project_id = 1
+        except Exception:
+            project_id = 1
+        try:
             task = Task(
                 code=f"XF{utc_now().strftime('%Y%m%d%H%M%S')}{secrets.token_hex(2).upper()}",
+                project_id=project_id,
                 creator_id=current_user.id,
                 supervisor_id=int(supervisor_id) if supervisor_id else None,
                 operator_id=int(operator_id) if operator_id else None,
