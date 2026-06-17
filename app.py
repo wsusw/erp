@@ -334,7 +334,8 @@ def load_user(user_id):
 def parse_date(value: str, default: Optional[date] = None) -> Optional[date]:
     if not value:
         return default
-    return datetime.strptime(value, "%Y-%m-%d").date()
+    normalized = value.strip().replace("/", "-")
+    return datetime.strptime(normalized, "%Y-%m-%d").date()
 
 
 def dates_are_valid(start_value: str, end_value: str):
