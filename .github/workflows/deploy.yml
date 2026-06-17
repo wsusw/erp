@@ -20,17 +20,24 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          # 🔥 关键修复：将命令超时时间延长到 10 分钟，避免因网络慢被中断
+          command_timeout: 10m
           script: |
             set -e
             cd /srv/erp
 
-            # 拉取最新代码
-            git pull origin main
+            # 🔥 增加重试机制：git pull 失败时自动重试 3 次，每次间隔 5 秒
+            echo "正在拉取最新代码..."
+            for i in 1 2 3; do
+              git pull origin main && break || sleep 5
+            done
 
             # 安装/更新 Python 依赖
+            echo "正在安装依赖..."
             /srv/erp/venv/bin/pip install -r requirements.txt
 
             # 重启服务
+            echo "正在重启服务..."
             sudo systemctl restart erp
 
             # 等待服务就绪
