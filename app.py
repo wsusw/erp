@@ -1635,9 +1635,15 @@ def import_tasks():
     if not file or not file.filename:
         flash("❌ 请上传 CSV 文件", "danger")
         return redirect(url_for("tasks"))
-    try:
-        text = file.read().decode("utf-8-sig")
-    except UnicodeDecodeError:
+    raw = file.read()
+    text = None
+    for encoding in ("utf-8-sig", "utf-8", "gbk", "gb18030", "latin-1"):
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
         flash("❌ 文件编码无法识别，请使用 UTF-8 CSV 模板导入", "danger")
         return redirect(url_for("tasks"))
     reader = csv.DictReader(io.StringIO(text))
