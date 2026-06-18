@@ -52,3 +52,13 @@ Thumbs.db
 
 # csv文件不上传
 *.csv
+
+# 上传文件（运行时生成，不上传）
+uploads/confirmations/*.jpg
+uploads/confirmations/*.png
+uploads/confirmations/*.jpeg
+uploads/confirmations/*.gif
+uploads/confirmations/*.webp
+uploads/confirmations/*.pdf
+uploads/confirmations/*.mp4
+uploads/confirmations/*.mov

@@ -643,6 +643,7 @@ def seed_data():
 
     task = Task(
         code=f"XF{utc_now().strftime('%Y%m%d%H%M%S')}",
+        project_id=p1.id,
         creator_id=admin.id,
         supervisor_id=supervisor_emp.id,
         operator_id=operator_emp.id,
@@ -822,8 +823,15 @@ def create_task():
         flash(f"❌ {date_error}", "danger")
         return redirect(url_for("tasks"))
 
+    # project_id 兜底至项目1，与导入逻辑保持一致，兼容旧库 NOT NULL 约束
+    project_id = 1
+    if not Project.query.get(project_id):
+        first_project = Project.query.first()
+        project_id = first_project.id if first_project else 1
+
     task = Task(
         code=f"XF{utc_now().strftime('%Y%m%d%H%M%S')}{secrets.token_hex(2).upper()}",
+        project_id=project_id,
         creator_id=current_user.id,
         supervisor_id=int(supervisor_id) if supervisor_id else None,
         operator_id=int(operator_id) if operator_id else None,

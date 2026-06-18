@@ -11,7 +11,7 @@
 <div class="confirm-card">
   <div class="login-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="先锋探店"></div>
   <h1>门店执行确认</h1>
-  <p class="muted">{{ task.store_name }} · {{ task.address }}</p>
+  <p class="muted">{% if task.store_name and task.store_name != '1' %}{{ task.store_name }}{% if task.address %} · {% endif %}{% endif %}{{ task.address }}</p>
   <div class="confirm-info">
     <div><span>工单号</span><strong>{{ task.code }}</strong></div>
     <div><span>任务截止</span><strong>{{ task.end_time }}</strong></div>

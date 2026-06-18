@@ -23,9 +23,9 @@ button, input, select, textarea { font-family: inherit; }
 .app-shell { display: flex; min-height: 100vh; }
 .sidebar { width: 248px; background: var(--surface); border-right: 1px solid var(--border); padding: 18px 14px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
 .brand { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; padding: 6px 8px 18px; border-bottom: 1px solid var(--border); }
-.brand-logo { width: 100%; min-height: 72px; border-radius: 16px; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; padding: 8px 10px; box-shadow: 0 6px 18px rgba(0,0,0,.06); }
+.brand-logo { width: 100%; min-height: 72px; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; padding: 8px 10px; }
 .brand-logo img { display: block; height: 56px; width: 100%; max-width: 210px; object-fit: contain; filter: none; }
-.brand-logo.logo-missing::after { content: "先锋探店"; color: #fff; font-weight: 700; letter-spacing: .08em; }
+.brand-logo.logo-missing::after { content: "先锋探店"; color: var(--text-main); font-weight: 700; letter-spacing: .08em; }
 .login-logo { max-width: 320px; margin: 0 auto 22px; }
 .login-logo img { display: block; height: 92px; width: auto; max-width: 100%; margin: 0 auto; }
 .login-logo.logo-missing::after { content: "先锋探店"; color: var(--text-main); font-size: 24px; font-weight: 700; letter-spacing: .08em; }
@@ -150,8 +150,9 @@ textarea.rich { min-height: 220px; line-height: 1.7; }
 .login-form button { margin-top: 14px; height: 44px; border-radius: 10px; }
 .login-help { color: var(--text-disabled); font-size: 12px; margin-top: 24px; line-height: 1.7; }
 .confirm-card { background: #fff; box-shadow: var(--shadow); border-radius: 20px; padding: 26px; text-align: left; }
-.confirm-card .login-logo { margin-left: 0; max-width: 190px; }
-.confirm-card .login-logo img { width: 100%; height: auto; }
+.confirm-card h1, .confirm-card > .muted { text-align: center; }
+.confirm-card .login-logo { margin: 0 auto 18px; max-width: 100px; }
+.confirm-card .login-logo img { width: auto; height: auto; max-width: 100%; max-height: 80px; }
 .confirm-info { background: var(--surface-muted); padding: 14px; border-radius: 12px; margin: 18px 0; }
 .confirm-info div { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
 .confirm-info span { color: var(--text-secondary); }
