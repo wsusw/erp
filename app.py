@@ -1614,16 +1614,36 @@ def employees():
     return render_template("employees.html", employees=all_employees, supervisors=supervisors)
 
 
-@app.route("/employees/<int:emp_id>/target", methods=["POST"])
+@app.route("/employees/<int:emp_id>/edit", methods=["POST"])
 @login_required
 @role_required("super_admin", "supervisor")
-def update_employee_target(emp_id):
+def update_employee(emp_id):
     emp = Employee.query.get_or_404(emp_id)
+    # 权限检查：超管可编辑所有人，主管只能编辑自己的分管运营人员
     if current_user.role == "supervisor" and emp.supervisor_id != current_employee_id() and emp.id != current_employee_id():
         abort(403)
+
+    before = f"姓名：{emp.name}；手机：{emp.phone}；岗位：{emp.position}；主管：{emp.supervisor.name if emp.supervisor else '无'}；月目标：{emp.monthly_target}"
+
+    emp.name = request.form.get("name", emp.name).strip()
+    if not emp.name:
+        flash("❌ 姓名不能为空", "danger")
+        return redirect(url_for("employees"))
+
+    emp.phone = request.form.get("phone", emp.phone).strip()
+
+    # 超管可以修改岗位和直属主管
+    if current_user.role == "super_admin":
+        emp.position = request.form.get("position", emp.position).strip()
+        new_supervisor_id = request.form.get("supervisor_id")
+        emp.supervisor_id = int(new_supervisor_id) if new_supervisor_id else None
+
     emp.monthly_target = int(request.form.get("monthly_target", 0) or 0)
+
+    after = f"姓名：{emp.name}；手机：{emp.phone}；岗位：{emp.position}；主管：{emp.supervisor.name if emp.supervisor else '无'}；月目标：{emp.monthly_target}"
+    log_operation("人员管理", "编辑人员档案", f"{emp.name}：{before} → {after}")
     db.session.commit()
-    flash("✅ 月度目标已更新", "success")
+    flash("✅ 人员档案已更新", "success")
     return redirect(url_for("employees"))
 
 
@@ -1877,6 +1897,45 @@ def batch_update_tasks():
         updated += 1
     db.session.commit()
     flash(f"✅ 已批量更新 {updated} 条任务", "success")
+    return redirect(url_for("tasks"))
+
+
+@app.route("/tasks/batch-void", methods=["POST"])
+@login_required
+@role_required("super_admin", "supervisor")
+def batch_void_tasks():
+    ids = request.form.getlist("task_ids")
+    if not ids:
+        flash("❌ 请勾选至少一个任务", "danger")
+        return redirect(url_for("tasks"))
+    reason = request.form.get("batch_void_reason", "").strip() or "任务池批量作废"
+    voided = 0
+    skipped_completed = 0
+    skipped_permission = 0
+    for task in Task.query.filter(Task.is_voided.is_(False), Task.id.in_([int(x) for x in ids])).all():
+        if task.task_status in ["已完成", "放弃执行", "已作废"]:
+            skipped_completed += 1
+            continue
+        if not can_access_task(task):
+            skipped_permission += 1
+            continue
+        before = f"状态：{task.task_status}；门店：{task.store_name}"
+        task.is_voided = True
+        task.voided_at = utc_now()
+        task.voided_by_id = current_user.id
+        task.void_reason = reason
+        task.task_status = "已作废"
+        task.audit_status = "已作废"
+        add_flow(task, "批量作废门店任务", before=before, after=f"已作废；原因：{reason}")
+        voided += 1
+    log_operation("门店任务", "批量作废任务", f"成功 {voided} 条，跳过已完结 {skipped_completed} 条，跳过无权限 {skipped_permission} 条")
+    db.session.commit()
+    parts = [f"成功作废 {voided} 条"]
+    if skipped_completed:
+        parts.append(f"跳过已完结 {skipped_completed} 条")
+    if skipped_permission:
+        parts.append(f"跳过无权限 {skipped_permission} 条")
+    flash(f"✅ 批量作废完成：{'，'.join(parts)}", "success")
     return redirect(url_for("tasks"))
 
 

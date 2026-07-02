@@ -60,7 +60,12 @@
 <form method="post" action="{{ url_for('batch_update_tasks') }}" class="card compact">
   <div class="card-head">
     <h3>门店任务池</h3>
-    {% if current_user.role in ['super_admin','supervisor'] %}<button class="btn ghost" type="button" onclick="toggleBox('batchBox')">批量设置</button>{% endif %}
+    {% if current_user.role in ['super_admin','supervisor'] %}
+    <div class="head-actions">
+      <button class="btn ghost" type="button" onclick="toggleBox('batchBox')">批量设置</button>
+      <button class="btn ghost" type="button" onclick="toggleBox('batchVoidBox')">批量作废</button>
+    </div>
+    {% endif %}
   </div>
   {% if current_user.role in ['super_admin','supervisor'] %}
   <div id="batchBox" class="hidden batch-box">
@@ -69,6 +74,12 @@
     <input type="date" name="batch_end_time" placeholder="截止时间">
     <select name="batch_operator_id"><option value="">不改运营</option>{% for e in operators %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select>
     <button class="btn primary" type="submit">确认批量更新</button>
+  </div>
+  <div id="batchVoidBox" class="hidden batch-box">
+    <button class="btn danger" type="submit"
+            formaction="{{ url_for('batch_void_tasks') }}"
+            formmethod="post"
+            onclick="return confirmBatchVoid()">确认批量作废</button>
   </div>
   {% endif %}
   <div class="table-wrap">
@@ -108,4 +119,14 @@
     </table>
   </div>
 </form>
+<script>
+function confirmBatchVoid() {
+  var checked = document.querySelectorAll('input[name="task_ids"]:checked');
+  if (checked.length === 0) {
+    alert('请至少勾选一个任务');
+    return false;
+  }
+  return confirm('确认批量作废已勾选的 ' + checked.length + ' 个门店任务？\n\n作废后任务池、统计、导出中将不再显示，但数据库和流转记录会保留。\n\n注意：已完结（已完成/放弃执行）的任务将被自动跳过。');
+}
+</script>
 {% endblock %}
