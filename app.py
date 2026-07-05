@@ -559,6 +559,7 @@ def apply_task_filters(q):
     date_to = request.args.get("date_to", "").strip()
     min_price = request.args.get("min_price", "").strip()
     max_price = request.args.get("max_price", "").strip()
+    operator_id = request.args.get("operator_id", "").strip()
     if keyword:
         like = f"%{keyword}%"
         q = q.filter(or_(Task.code.like(like), Task.store_name.like(like), Task.address.like(like), Task.region.like(like)))
@@ -574,6 +575,8 @@ def apply_task_filters(q):
         q = q.filter((Task.payment_base_price + Task.approved_extra_price) >= parse_float(min_price))
     if max_price:
         q = q.filter((Task.payment_base_price + Task.approved_extra_price) <= parse_float(max_price))
+    if operator_id:
+        q = q.filter(Task.operator_id == int(operator_id))
     return q
 
 
@@ -797,6 +800,8 @@ def tasks():
     projects = Project.query.order_by(Project.project_name.asc()).all()
     supervisors = allowed_supervisors_for_current_user()
     operators = allowed_operators_for_current_user()
+    if request.headers.get("HX-Request"):
+        return render_template("_tasks_results.html", tasks=tasks_list, operators=operators)
     return render_template("tasks.html", tasks=tasks_list, projects=projects, supervisors=supervisors, operators=operators)
 
 

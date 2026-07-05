@@ -31,40 +31,77 @@
 
 <div class="detail-grid">
   <section class="card">
-    <div class="card-head"><h3>1. 门店档案</h3></div>
-    <form method="post" action="{{ url_for('update_task_basic', task_id=task.id) }}" class="grid-form two">
-      <div><label>门店名称</label><input name="store_name" value="{{ task.store_name }}"></div>
-      <div><label>区域</label><input name="region" value="{{ task.region }}"></div>
-      <div><label>紧急度</label><select name="urgency"><option {% if task.urgency=='一般' %}selected{% endif %}>一般</option><option {% if task.urgency=='紧急' %}selected{% endif %}>紧急</option></select></div>
-      <div><label>开始时间</label><input type="date" name="start_time" value="{{ task.start_time.strftime('%Y-%m-%d') }}"></div>
-      <div><label>截止时间</label><input type="date" name="end_time" value="{{ task.end_time.strftime('%Y-%m-%d') }}"></div>
-      <div class="span-2"><label>地址</label><input name="address" value="{{ task.address }}"></div>
-      {% if current_user.role in ['super_admin','supervisor'] %}<div><label>打款基准价</label><input type="number" step="0.01" name="payment_base_price" value="{{ task.payment_base_price }}"></div>{% endif %}
-      {% if current_user.role == 'super_admin' %}<div><label>代理价（仅超管）</label><input type="number" step="0.01" name="agency_price" value="{{ task.agency_price or '' }}"></div>{% endif %}
-      <div class="span-2"><label>备注</label><textarea name="store_remarks" rows="3">{{ task.store_remarks }}</textarea></div>
-      <div class="span-2 right"><button class="btn primary">保存基础信息</button></div>
-    </form>
+    <div class="card-head">
+      <h3>1. 门店档案</h3>
+      <button type="button" class="btn ghost" id="btn-edit-section1" onclick="toggleSectionEdit('section1')">编辑</button>
+    </div>
+    <!-- 查看模式 -->
+    <div id="section1-view" class="section-view">
+      <div class="info-grid two">
+        <div class="info-item"><label>门店名称</label><strong>{{ task.store_name }}</strong></div>
+        <div class="info-item"><label>区域</label><strong>{{ task.region }}</strong></div>
+        <div class="info-item"><label>紧急度</label><strong>{{ task.urgency }}</strong></div>
+        <div class="info-item"><label>开始时间</label><strong>{{ task.start_time.strftime('%Y-%m-%d') }}</strong></div>
+        <div class="info-item"><label>截止时间</label><strong>{{ task.end_time.strftime('%Y-%m-%d') }}</strong></div>
+        <div class="info-item"><label>地址</label><strong>{{ task.address }}</strong></div>
+        {% if current_user.role in ['super_admin','supervisor'] %}<div class="info-item"><label>打款基准价</label><strong>¥{{ '%.2f'|format(task.payment_base_price) }}</strong></div>{% endif %}
+        {% if current_user.role == 'super_admin' %}<div class="info-item"><label>代理价（仅超管）</label><strong>¥{{ '%.2f'|format(task.agency_price or 0) }}</strong></div>{% endif %}
+        <div class="info-item span-2"><label>备注</label><div class="info-text">{{ task.store_remarks or '—' }}</div></div>
+      </div>
+    </div>
+    <!-- 编辑模式 -->
+    <div id="section1-edit" class="section-edit hidden">
+      <form method="post" action="{{ url_for('update_task_basic', task_id=task.id) }}" class="grid-form two">
+        <div><label>门店名称</label><input name="store_name" value="{{ task.store_name }}"></div>
+        <div><label>区域</label><input name="region" value="{{ task.region }}"></div>
+        <div><label>紧急度</label><select name="urgency"><option {% if task.urgency=='一般' %}selected{% endif %}>一般</option><option {% if task.urgency=='紧急' %}selected{% endif %}>紧急</option></select></div>
+        <div><label>开始时间</label><input type="date" name="start_time" value="{{ task.start_time.strftime('%Y-%m-%d') }}"></div>
+        <div><label>截止时间</label><input type="date" name="end_time" value="{{ task.end_time.strftime('%Y-%m-%d') }}"></div>
+        <div class="span-2"><label>地址</label><input name="address" value="{{ task.address }}"></div>
+        {% if current_user.role in ['super_admin','supervisor'] %}<div><label>打款基准价</label><input type="number" step="0.01" name="payment_base_price" value="{{ task.payment_base_price }}"></div>{% endif %}
+        {% if current_user.role == 'super_admin' %}<div><label>代理价（仅超管）</label><input type="number" step="0.01" name="agency_price" value="{{ task.agency_price or '' }}"></div>{% endif %}
+        <div class="span-2"><label>备注</label><textarea name="store_remarks" rows="3">{{ task.store_remarks }}</textarea></div>
+        <div class="span-2 right edit-toggle-bar">
+          <button type="button" class="btn ghost" onclick="toggleSectionEdit('section1')">取消</button>
+          <button class="btn primary">保存基础信息</button>
+        </div>
+      </form>
+    </div>
   </section>
 
   <section class="card">
-    <div class="card-head"><h3>2. 指派与状态</h3></div>
+    <div class="card-head">
+      <h3>2. 指派与状态</h3>
+      {% if current_user.role in ['super_admin','supervisor'] %}
+      <button type="button" class="btn ghost" id="btn-edit-section2" onclick="toggleSectionEdit('section2')">编辑</button>
+      {% endif %}
+    </div>
+    <!-- 查看模式（所有角色） -->
+    <div id="section2-view" class="section-view">
+      <div class="kv"><span>主管</span><strong>{{ task.supervisor.name if task.supervisor else '未分配' }}</strong></div>
+      <div class="kv"><span>运营</span><strong>{{ task.operator.name if task.operator else '未分配' }}</strong></div>
+      <div class="kv"><span>任务状态</span><strong>{{ task.task_status }}</strong></div>
+      <div class="kv"><span>打款状态</span><strong>{{ task.payment_status }}</strong></div>
+      {% if current_user.role in ['super_admin','supervisor'] %}
+      <form method="post" action="{{ url_for('update_payment_status', task_id=task.id) }}" class="inline-form" style="margin-top:10px">
+        <select name="payment_status"><option {% if task.payment_status=='待打款' %}selected{% endif %}>待打款</option><option {% if task.payment_status=='打款中' %}selected{% endif %}>打款中</option><option {% if task.payment_status=='已打款' %}selected{% endif %}>已打款</option></select>
+        <button class="btn ghost">更新打款状态</button>
+      </form>
+      {% endif %}
+    </div>
     {% if current_user.role in ['super_admin','supervisor'] %}
-    <form method="post" action="{{ url_for('assign_task', task_id=task.id) }}" class="grid-form two">
-      {% if current_user.role == 'super_admin' %}<div><label>主管</label><select name="supervisor_id"><option value="">未分配</option>{% for e in supervisors %}<option value="{{ e.id }}" {% if task.supervisor_id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select></div>{% endif %}
-      <div><label>运营</label><select name="operator_id"><option value="">未分配</option>{% for e in operators %}<option value="{{ e.id }}" {% if task.operator_id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select></div>
-      <div><label>任务状态</label><select name="task_status">{% for s in TASK_STATUSES %}<option value="{{ s }}" {% if task.task_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
-      <div class="span-2 right"><button class="btn primary">保存分配/状态</button></div>
-    </form>
-    {% else %}
-    <div class="kv"><span>主管</span><strong>{{ task.supervisor.name if task.supervisor else '未分配' }}</strong></div>
-    <div class="kv"><span>运营</span><strong>{{ task.operator.name if task.operator else '未分配' }}</strong></div>
-    {% endif %}
-    <div class="kv"><span>打款状态</span><strong>{{ task.payment_status }}</strong></div>
-    {% if current_user.role in ['super_admin','supervisor'] %}
-    <form method="post" action="{{ url_for('update_payment_status', task_id=task.id) }}" class="inline-form">
-      <select name="payment_status"><option {% if task.payment_status=='待打款' %}selected{% endif %}>待打款</option><option {% if task.payment_status=='打款中' %}selected{% endif %}>打款中</option><option {% if task.payment_status=='已打款' %}selected{% endif %}>已打款</option></select>
-      <button class="btn ghost">更新打款状态</button>
-    </form>
+    <!-- 编辑模式 -->
+    <div id="section2-edit" class="section-edit hidden">
+      <form method="post" action="{{ url_for('assign_task', task_id=task.id) }}" class="grid-form two">
+        {% if current_user.role == 'super_admin' %}<div><label>主管</label><select name="supervisor_id"><option value="">未分配</option>{% for e in supervisors %}<option value="{{ e.id }}" {% if task.supervisor_id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select></div>{% endif %}
+        <div><label>运营</label><select name="operator_id"><option value="">未分配</option>{% for e in operators %}<option value="{{ e.id }}" {% if task.operator_id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select></div>
+        <div><label>任务状态</label><select name="task_status">{% for s in TASK_STATUSES %}<option value="{{ s }}" {% if task.task_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+        <div class="span-2 right edit-toggle-bar">
+          <button type="button" class="btn ghost" onclick="toggleSectionEdit('section2')">取消</button>
+          <button class="btn primary">保存分配/状态</button>
+        </div>
+      </form>
+    </div>
     {% endif %}
   </section>
 </div>
@@ -145,17 +182,38 @@
 
 <div class="detail-grid">
   <section class="card">
-    <div class="card-head"><h3>5. 执行人和收款人信息</h3></div>
-    <form method="post" action="{{ url_for('update_executor_payee', task_id=task.id) }}" class="grid-form two">
-      <div><label>执行人姓名</label><input name="executor_name" value="{{ task.executor_name }}"></div>
-      <div><label>执行人手机号</label><input name="executor_phone" value="{{ task.executor_phone }}"></div>
-      <div><label>收款人姓名</label><input name="payee_name" value="{{ task.payee_name }}"></div>
-      <div><label>收款人手机号</label><input name="payee_phone" value="{{ task.payee_phone }}"></div>
-      <div><label>开户行</label><input name="payee_bank" value="{{ task.payee_bank }}"></div>
-      <div><label>银行卡/收款账号</label><input name="payee_account" value="{{ task.payee_account }}"></div>
-      <div class="span-2"><label>执行备注</label><textarea name="executor_remarks" rows="3">{{ task.executor_remarks }}</textarea></div>
-      <div class="span-2 right"><button class="btn primary">保存执行/收款档案</button></div>
-    </form>
+    <div class="card-head">
+      <h3>5. 执行人和收款人信息</h3>
+      <button type="button" class="btn ghost" id="btn-edit-section5" onclick="toggleSectionEdit('section5')">编辑</button>
+    </div>
+    <!-- 查看模式 -->
+    <div id="section5-view" class="section-view">
+      <div class="info-grid two">
+        <div class="info-item"><label>执行人姓名</label><strong>{{ task.executor_name or '—' }}</strong></div>
+        <div class="info-item"><label>执行人手机号</label><strong>{{ task.executor_phone or '—' }}</strong></div>
+        <div class="info-item"><label>收款人姓名</label><strong>{{ task.payee_name or '—' }}</strong></div>
+        <div class="info-item"><label>收款人手机号</label><strong>{{ task.payee_phone or '—' }}</strong></div>
+        <div class="info-item"><label>开户行</label><strong>{{ task.payee_bank or '—' }}</strong></div>
+        <div class="info-item"><label>银行卡/收款账号</label><strong>{{ task.payee_account or '—' }}</strong></div>
+        <div class="info-item span-2"><label>执行备注</label><div class="info-text">{{ task.executor_remarks or '—' }}</div></div>
+      </div>
+    </div>
+    <!-- 编辑模式 -->
+    <div id="section5-edit" class="section-edit hidden">
+      <form method="post" action="{{ url_for('update_executor_payee', task_id=task.id) }}" class="grid-form two">
+        <div><label>执行人姓名</label><input name="executor_name" value="{{ task.executor_name }}"></div>
+        <div><label>执行人手机号</label><input name="executor_phone" value="{{ task.executor_phone }}"></div>
+        <div><label>收款人姓名</label><input name="payee_name" value="{{ task.payee_name }}"></div>
+        <div><label>收款人手机号</label><input name="payee_phone" value="{{ task.payee_phone }}"></div>
+        <div><label>开户行</label><input name="payee_bank" value="{{ task.payee_bank }}"></div>
+        <div><label>银行卡/收款账号</label><input name="payee_account" value="{{ task.payee_account }}"></div>
+        <div class="span-2"><label>执行备注</label><textarea name="executor_remarks" rows="3">{{ task.executor_remarks }}</textarea></div>
+        <div class="span-2 right edit-toggle-bar">
+          <button type="button" class="btn ghost" onclick="toggleSectionEdit('section5')">取消</button>
+          <button class="btn primary">保存执行/收款档案</button>
+        </div>
+      </form>
+    </div>
   </section>
 
   <section class="card">

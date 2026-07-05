@@ -215,3 +215,22 @@ textarea.rich { min-height: 220px; line-height: 1.7; }
 .btn.danger:hover { background: #E12D24; }
 .small-btn { padding: 6px 10px; font-size: 12px; }
 .mini-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid #F1F1F4; }
+
+/* 详情页 查看/编辑 切换 */
+.section-view { }
+.info-grid { display: grid; gap: 14px; }
+.info-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.info-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.info-item { }
+.info-item label { display: block; color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; }
+.info-item strong { display: block; font-size: 14px; font-weight: 500; min-height: 22px; }
+.info-item .info-text { font-size: 14px; color: var(--text-main); line-height: 1.6; white-space: pre-wrap; }
+.edit-toggle-bar { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+
+/* htmx loading indicator */
+.htmx-indicator { opacity: 0; transition: opacity .2s ease; }
+.htmx-request .htmx-indicator { opacity: 1; }
+.htmx-request.htmx-indicator { opacity: 1; }
+
+/* htmx 请求中的加载提示 */
+#tasks-loading.htmx-request { opacity: 1; }

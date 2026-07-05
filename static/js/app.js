@@ -94,6 +94,26 @@ window.toggleConfirmWarning = function() {
   file.required = s.value === '已执行已提交';
 };
 
+// 详情页查看/编辑模式切换
+function toggleSectionEdit(sectionId) {
+  const viewEl = document.getElementById(sectionId + '-view');
+  const editEl = document.getElementById(sectionId + '-edit');
+  const btnEl = document.getElementById('btn-edit-' + sectionId);
+  if (!viewEl || !editEl) return;
+  const isEditing = !editEl.classList.contains('hidden');
+  if (isEditing) {
+    // 切换回查看模式
+    editEl.classList.add('hidden');
+    viewEl.classList.remove('hidden');
+    if (btnEl) { btnEl.textContent = '编辑'; btnEl.classList.remove('danger'); btnEl.classList.add('ghost'); }
+  } else {
+    // 切换到编辑模式
+    viewEl.classList.add('hidden');
+    editEl.classList.remove('hidden');
+    if (btnEl) { btnEl.textContent = '取消编辑'; btnEl.classList.remove('ghost'); btnEl.classList.add('danger'); }
+  }
+}
+
 // 防止重复提交。延迟禁用，避免浏览器原生必填校验和自定义校验被阻断。
 document.addEventListener('submit', (event) => {
   const form = event.target;
@@ -107,3 +127,13 @@ document.addEventListener('submit', (event) => {
     });
   }, 0);
 });
+
+// 批量作废确认
+function confirmBatchVoid() {
+  var checked = document.querySelectorAll('input[name="task_ids"]:checked');
+  if (checked.length === 0) {
+    alert('请至少勾选一个任务');
+    return false;
+  }
+  return confirm('确认批量作废已勾选的 ' + checked.length + ' 个门店任务？\n\n作废后任务池、统计、导出中将不再显示，但数据库和流转记录会保留。\n\n注意：已完结（已完成/放弃执行）的任务将被自动跳过。');
+}
