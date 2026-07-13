@@ -51,14 +51,19 @@ function copyField(id) {
 }
 
 function richCmd(command, value = null) {
-  document.execCommand(command, false, value);
   const editor = document.getElementById('sopEditor');
-  if (editor) editor.focus();
+  if (!editor) return;
+  // 先聚焦编辑器再执行命令，确保选区在编辑区内，避免焦点/选区丢失导致删除键失灵
+  editor.focus();
+  document.execCommand(command, false, value);
 }
 
 function insertRichLink(type) {
   const url = prompt(type === 'video' ? '请输入视频 URL（mp4/mov 或可访问链接）' : '请输入图片 URL');
   if (!url) return;
+  const editor = document.getElementById('sopEditor');
+  if (!editor) return;
+  editor.focus();
   if (type === 'video') {
     document.execCommand('insertHTML', false, `<p><video controls style="max-width:100%;border-radius:12px" src="${url}"></video></p>`);
   } else {

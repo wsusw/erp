@@ -17,6 +17,7 @@
     <input type="date" name="batch_start_time" placeholder="开始时间">
     <input type="date" name="batch_end_time" placeholder="截止时间">
     <select name="batch_operator_id"><option value="">不改运营</option>{% for e in operators %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select>
+    <select name="batch_task_status"><option value="">不改状态</option>{% for s in TASK_STATUSES %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select>
     <button class="btn primary" type="submit">确认批量更新</button>
   </div>
   <div id="batchVoidBox" class="hidden batch-box">

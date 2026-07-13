@@ -58,7 +58,7 @@ ROLE_LABELS = {
 }
 
 TASK_STATUSES = [
-    "待主管承接", "待主管分配", "待运营承接", "进行中", "待主管审核", "已完成", "已退回", "异常上报", "放弃执行", "已作废"
+    "待确认", "待主管承接", "待主管分配", "待运营承接", "进行中", "待主管审核", "已完成", "已退回", "异常上报", "放弃执行", "已作废"
 ]
 
 CONFIRMATION_STATUSES = ["未确认", "已执行待提交", "待执行", "放弃执行", "已执行已提交"]
@@ -514,11 +514,16 @@ def save_upload(field_name: str, subdir: str = "general") -> str:
     file = request.files.get(field_name)
     if not file or not file.filename:
         return ""
-    filename = secure_filename(file.filename)
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    original_filename = file.filename
+    # 从原始文件名提取扩展名，避免 secure_filename 对中文等非 ASCII 字符的处理导致扩展名丢失
+    ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
     if ext not in ALLOWED_UPLOAD_EXTENSIONS:
         flash(f"❌ 不支持的附件格式：{ext}", "danger")
         return ""
+    filename = secure_filename(original_filename)
+    # secure_filename 可能对全中文文件名返回空字符串，兜底处理
+    if not filename:
+        filename = f"upload_{secrets.token_hex(4)}.{ext}"
     folder = os.path.join(app.config["UPLOAD_FOLDER"], subdir)
     os.makedirs(folder, exist_ok=True)
     stored_name = f"{utc_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(5)}_{filename}"
@@ -1373,6 +1378,7 @@ def review_travel(subsidy_id):
             subsidy.status = "已通过"
             subsidy.supervisor_comment = comment
             subsidy.supervisor_reviewed_at = utc_now()
+            task.approved_extra_price += subsidy.amount
         else:
             if subsidy.status == "待主管审批" and current_user.role == "supervisor":
                 subsidy.status = "主管已通过待超管审批"
@@ -1382,10 +1388,12 @@ def review_travel(subsidy_id):
                 subsidy.status = "已通过"
                 subsidy.admin_comment = comment
                 subsidy.admin_reviewed_at = utc_now()
+                task.approved_extra_price += subsidy.amount
             else:
                 flash("❌ 15 元以上补贴必须由超管终审", "danger")
                 return redirect(url_for("task_detail", task_id=task.id))
-        add_flow(task, "路费补贴审批", before, f"{subsidy.status}；意见：{comment}")
+        after_price = task.final_payment_price
+        add_flow(task, "路费补贴审批", f"{before}；打款价：{after_price - subsidy.amount if subsidy.status == '已通过' else after_price}", f"{subsidy.status}；金额：{subsidy.amount}；打款价：{after_price}；意见：{comment}")
     else:
         flash("❌ 审批决定无效", "danger")
         return redirect(url_for("task_detail", task_id=task.id))
@@ -1403,13 +1411,15 @@ def start_confirmation(task_id):
     task = Task.query.get_or_404(task_id)
     if not can_access_task(task):
         abort(403)
-    before = f"状态：{task.confirmation_status}；核对：{task.confirmation_review_status}"
+    before = f"状态：{task.confirmation_status}；核对：{task.confirmation_review_status}；任务：{task.task_status}"
     if not task.confirmation_token:
         task.confirmation_token = secrets.token_urlsafe(32)
     task.confirmation_started_at = utc_now()
     if task.confirmation_review_status in [None, "", "未发起", "链接已作废"]:
         task.confirmation_review_status = "待第三方提交"
-    add_flow(task, "发起门店执行确认", before, f"已发起；确认链接：/confirm/{task.confirmation_token[:8]}...")
+    if task.task_status not in ["已完成", "放弃执行", "已作废", "待确认"]:
+        task.task_status = "待确认"
+    add_flow(task, "发起门店执行确认", before, f"已发起；确认链接：/confirm/{task.confirmation_token[:8]}...；任务状态：{task.task_status}")
     db.session.commit()
     flash("✅ 已发起门店执行确认，可复制链接发送给神秘顾客", "success")
     return redirect(url_for("task_detail", task_id=task.id))
@@ -1428,7 +1438,9 @@ def mark_confirmation_sent(task_id):
     task.confirmation_sent_note = request.form.get("sent_note", "").strip()
     if task.confirmation_review_status in [None, "", "未发起"]:
         task.confirmation_review_status = "待第三方提交"
-    add_flow(task, "标记确认链接已发送", after=f"发送对象：{task.confirmation_sent_to or '未填写'}；备注：{task.confirmation_sent_note}")
+    if task.task_status not in ["已完成", "放弃执行", "已作废", "待确认"]:
+        task.task_status = "待确认"
+    add_flow(task, "标记确认链接已发送", after=f"发送对象：{task.confirmation_sent_to or '未填写'}；备注：{task.confirmation_sent_note}；任务状态：{task.task_status}")
     db.session.commit()
     flash("✅ 已记录确认链接发送信息", "success")
     return redirect(url_for("task_detail", task_id=task.id))
@@ -1476,18 +1488,22 @@ def review_confirmation(task_id):
     if task.confirmation_status != "已执行已提交" or not task.confirmation_screenshot:
         flash("❌ 只有“已执行已提交”且已上传截图的记录才需要截图核对", "danger")
         return redirect(url_for("task_detail", task_id=task.id))
-    before = task.confirmation_review_status
+    before = f"核对：{task.confirmation_review_status}；任务：{task.task_status}"
     if decision == "pass":
         task.confirmation_review_status = "截图核对通过"
+        if task.task_status == "待确认":
+            task.task_status = "已完成"
     elif decision == "reject":
         task.confirmation_review_status = "截图核对驳回"
+        if task.task_status == "待确认":
+            task.task_status = "已退回"
     else:
         flash("❌ 核对决定无效", "danger")
         return redirect(url_for("task_detail", task_id=task.id))
     task.confirmation_review_note = note
     task.confirmation_reviewed_by = current_user.id
     task.confirmation_reviewed_at = utc_now()
-    add_flow(task, "门店确认截图核对", before, f"{task.confirmation_review_status}；意见：{note}")
+    add_flow(task, "门店确认截图核对", before, f"{task.confirmation_review_status}；意见：{note}；任务状态：{task.task_status}")
     db.session.commit()
     flash("✅ 门店确认截图核对结果已保存", "success")
     return redirect(url_for("task_detail", task_id=task.id))
@@ -1878,6 +1894,10 @@ def batch_update_tasks():
     start_time = request.form.get("batch_start_time")
     end_time = request.form.get("batch_end_time")
     operator_id = request.form.get("batch_operator_id")
+    task_status = request.form.get("batch_task_status", "").strip()
+    if task_status and task_status not in TASK_STATUSES:
+        flash("❌ 请选择正确的任务状态", "danger")
+        return redirect(url_for("tasks"))
     if start_time and end_time:
         _, _, date_error = dates_are_valid(start_time, end_time)
         if date_error:
@@ -1887,7 +1907,7 @@ def batch_update_tasks():
     for task in Task.query.filter(Task.is_voided.is_(False), Task.id.in_([int(x) for x in ids])).all():
         if not can_access_task(task):
             continue
-        before = f"紧急度：{task.urgency}；时间：{task.start_time}~{task.end_time}；运营：{task.operator.name if task.operator else '无'}"
+        before = f"紧急度：{task.urgency}；时间：{task.start_time}~{task.end_time}；运营：{task.operator.name if task.operator else '无'}；状态：{task.task_status}"
         if urgency:
             task.urgency = urgency
         if start_time:
@@ -1896,8 +1916,11 @@ def batch_update_tasks():
             task.end_time = parse_date(end_time, task.end_time)
         if operator_id:
             task.operator_id = int(operator_id)
-            task.task_status = "待运营承接"
-        after = f"紧急度：{task.urgency}；时间：{task.start_time}~{task.end_time}；运营：{task.operator.name if task.operator else '无'}"
+            if not task_status:
+                task.task_status = "待运营承接"
+        if task_status:
+            task.task_status = task_status
+        after = f"紧急度：{task.urgency}；时间：{task.start_time}~{task.end_time}；运营：{task.operator.name if task.operator else '无'}；状态：{task.task_status}"
         add_flow(task, "批量设置门店信息", before, after)
         updated += 1
     db.session.commit()
@@ -2010,6 +2033,8 @@ def reports():
     tasks_list = visible_tasks_query().all()
     total_payment = round(sum(t.final_payment_price for t in tasks_list), 2)
     total_agency = round(sum((t.agency_price or 0) for t in tasks_list), 2) if current_user.role == "super_admin" else None
+    if request.headers.get("HX-Request"):
+        return render_template("_reports_content.html", month=month, completion_rows=completion_rows, total_payment=total_payment, total_agency=total_agency)
     return render_template("reports.html", month=month, completion_rows=completion_rows, total_payment=total_payment, total_agency=total_agency)
 
 

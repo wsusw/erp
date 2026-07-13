@@ -147,6 +147,95 @@ def main():
     assert_ok(b"agency_price" in r.data, "批量导入模板包含代理价格 agency_price 字段")
     r = client.get("/tasks")
     assert_ok(b"min_agency" not in r.data and b"max_agency" not in r.data, "任务筛选区不显示代理价格筛选字段")
+    assert_ok("待确认".encode("utf-8") in r.data, "任务筛选区包含待确认状态")
+
+    r = client.post(
+        "/tasks/batch",
+        data={"task_ids": [str(task_id)], "batch_task_status": "待确认"},
+        follow_redirects=True,
+    )
+    assert_ok(r.status_code == 200 and "已批量更新".encode("utf-8") in r.data, "批量设置可更新任务状态")
+    with app.app_context():
+        task = db.session.get(Task, task_id)
+        assert_ok(task.task_status == "待确认", "批量设置已写入待确认状态")
+    r = client.get("/tasks?status=待确认")
+    assert_ok(r.status_code == 200 and "待确认".encode("utf-8") in r.data, "精准筛选可按待确认状态查询")
+
+    # 确认流程自动联动 task_status → 待确认
+    r = client.post(
+        "/tasks/create",
+        data={"store_name": "待确认联动测试", "start_time": "2026-06-01", "end_time": "2026-06-15", "payment_base_price": "100"},
+        follow_redirects=True,
+    )
+    assert_ok(r.status_code == 200, "超管可创建确认联动测试任务")
+    with app.app_context():
+        ct = Task.query.filter_by(store_name="待确认联动测试").first()
+        assert_ok(ct is not None, "确认联动测试任务已入库")
+        ct_id = ct.id
+        ct_token = ct.confirmation_token or "will-be-set"
+        # 确保任务处于可确认状态
+        ct.task_status = "进行中"
+        db.session.commit()
+    # 发起确认 → 应自动设为 待确认
+    r = client.post(f"/tasks/{ct_id}/confirmation/start", follow_redirects=True)
+    with app.app_context():
+        ct = db.session.get(Task, ct_id)
+        assert_ok(ct.task_status == "待确认", "发起门店确认后任务状态自动变为待确认")
+    # 第三方提交确认
+    with app.app_context():
+        ct = db.session.get(Task, ct_id)
+        ct_token = ct.confirmation_token
+    r = client.post(
+        f"/confirm/{ct_token}",
+        data={"confirmation_status": "已执行已提交", "confirmation_note": "联动测试",
+              "confirmation_screenshot": (BytesIO(b"fake"), "shot.jpg")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert_ok(r.status_code == 200 and "提交成功".encode("utf-8") in r.data, "第三方可提交确认联动测试")
+    # 审核通过 → 应从待确认变为已完成
+    r = client.post(
+        f"/tasks/{ct_id}/confirmation/review",
+        data={"decision": "pass", "review_note": "联动测试通过"},
+        follow_redirects=True,
+    )
+    with app.app_context():
+        ct = db.session.get(Task, ct_id)
+        assert_ok(ct.task_status == "已完成", "确认审核通过后任务状态从待确认自动变为已完成")
+        assert_ok(ct.confirmation_review_status == "截图核对通过", "确认审核状态为截图核对通过")
+
+    # 第二组：审核驳回 → 待确认 → 已退回
+    r = client.post(
+        "/tasks/create",
+        data={"store_name": "待确认驳回测试", "start_time": "2026-07-01", "end_time": "2026-07-15", "payment_base_price": "200"},
+        follow_redirects=True,
+    )
+    with app.app_context():
+        ct2 = Task.query.filter_by(store_name="待确认驳回测试").first()
+        ct2.task_status = "进行中"
+        db.session.commit()
+        ct2_id = ct2.id
+    r = client.post(f"/tasks/{ct2_id}/confirmation/start", follow_redirects=True)
+    with app.app_context():
+        ct2 = db.session.get(Task, ct2_id)
+        assert_ok(ct2.task_status == "待确认", "发起确认后第二个测试任务也自动变为待确认")
+        ct2_token = ct2.confirmation_token
+    r = client.post(
+        f"/confirm/{ct2_token}",
+        data={"confirmation_status": "已执行已提交", "confirmation_note": "驳回测试",
+              "confirmation_screenshot": (BytesIO(b"fake2"), "shot2.jpg")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    r = client.post(
+        f"/tasks/{ct2_id}/confirmation/review",
+        data={"decision": "reject", "review_note": "截图模糊，驳回"},
+        follow_redirects=True,
+    )
+    with app.app_context():
+        ct2 = db.session.get(Task, ct2_id)
+        assert_ok(ct2.task_status == "已退回", "确认审核驳回后任务状态从待确认自动变为已退回")
+        assert_ok(ct2.confirmation_review_status == "截图核对驳回", "确认审核状态为截图核对驳回")
 
     r = client.post(
         "/tasks/create",

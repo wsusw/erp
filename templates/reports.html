@@ -1,19 +1,5 @@
 {% extends 'base.html' %}
 {% set page_title = '统计报表' %}
 {% block content %}
-<section class="stats-grid small">
-  <div class="stat-card"><small>当前权限打款总价</small><strong>¥{{ '%.2f'|format(total_payment) }}</strong></div>
-  {% if current_user.role == 'super_admin' %}<div class="stat-card"><small>当前权限代理总价</small><strong>¥{{ '%.2f'|format(total_agency or 0) }}</strong></div>{% endif %}
-  <div class="stat-card"><small>导出任务</small><a href="{{ url_for('export_tasks') }}">任务数据 CSV</a></div>
-  <div class="stat-card"><small>导出流转</small><a href="{{ url_for('export_flows') }}">流转记录 CSV</a></div>
-  <div class="stat-card"><small>导出路费</small><a href="{{ url_for('export_travel') }}">路费审批 CSV</a></div>
-  <div class="stat-card"><small>导出确认</small><a href="{{ url_for('export_confirmations') }}">门店确认 CSV</a></div>
-</section>
-<section class="card compact">
-  <div class="card-head"><h3>月度完成率</h3><a class="btn ghost" href="{{ url_for('export_monthly', month=month) }}">导出月度完成率</a></div>
-  <form method="get" class="inline-form"><input type="month" name="month" value="{{ month }}"><button class="btn primary">查看</button></form>
-  <table class="data-table"><thead><tr><th>运营</th><th>本月分配任务</th><th>月度应完成</th><th>实际完成</th><th>完成率</th></tr></thead><tbody>
-    {% for r in completion_rows %}<tr><td><strong>{{ r.employee.name }}</strong><small>{{ r.employee.phone }}</small></td><td>{{ r.assigned }}</td><td>{{ r.target }}</td><td>{{ r.completed }}</td><td><span class="tag {{ 'green' if r.rate >= 100 else ('orange' if r.rate >= 60 else 'red') }}">{{ r.rate }}%</span></td></tr>{% else %}<tr><td colspan="5" class="empty">暂无运营数据</td></tr>{% endfor %}
-  </tbody></table>
-</section>
+{% include '_reports_content.html' %}
 {% endblock %}

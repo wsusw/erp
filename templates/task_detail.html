@@ -122,6 +122,7 @@
         <input type="color" title="文字颜色" onchange="richCmd('foreColor', this.value)">
         <button type="button" onclick="insertRichLink('image')">插入图片链接</button>
         <button type="button" onclick="insertRichLink('video')">插入视频链接</button>
+        <button type="button" class="danger" onclick="if(confirm('确定清空 SOP 全部内容？')){const ed=document.getElementById('sopEditor');if(ed)ed.innerHTML='';}">清空内容</button>
       </div>
       <div id="sopEditor" class="rich-editor" contenteditable="true">{{ task.task_sop_html|safe }}</div>
       <textarea id="sopHtml" class="hidden" name="task_sop_html">{{ task.task_sop_html }}</textarea>
@@ -129,7 +130,7 @@
         <div><label>上传并追加 SOP 图片/视频</label><input type="file" name="sop_media" accept="image/*,video/mp4,video/quicktime"></div>
         <div class="right"><button class="btn primary">保存 SOP</button></div>
       </div>
-      <div class="tip">保存后系统自动写入门店流转记录。插入外部链接时，请使用可访问的图片或视频 URL。</div>
+      <div class="tip">💡 点击图片/视频后按 Backspace 或 Delete 键即可删除。保存后系统自动写入门店流转记录。插入外部链接时，请使用可访问的图片或视频 URL。</div>
     </form>
     {% else %}
     <div class="sop-view">{{ task.task_sop_html|safe }}</div>
