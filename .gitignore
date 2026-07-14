@@ -62,3 +62,6 @@ uploads/confirmations/*.webp
 uploads/confirmations/*.pdf
 uploads/confirmations/*.mp4
 uploads/confirmations/*.mov
+
+#txt不上传
+*.txt

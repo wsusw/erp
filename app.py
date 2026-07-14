@@ -715,6 +715,22 @@ def ensure_sqlite_columns():
         ddl.append("ALTER TABLE task ADD COLUMN voided_by_id INTEGER")
     if "void_reason" not in existing:
         ddl.append("ALTER TABLE task ADD COLUMN void_reason TEXT DEFAULT ''")
+    if "agency_price" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN agency_price FLOAT")
+    if "executor_name" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN executor_name VARCHAR(64) DEFAULT ''")
+    if "executor_phone" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN executor_phone VARCHAR(32) DEFAULT ''")
+    if "payee_name" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN payee_name VARCHAR(64) DEFAULT ''")
+    if "payee_phone" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN payee_phone VARCHAR(32) DEFAULT ''")
+    if "payee_bank" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN payee_bank VARCHAR(128) DEFAULT ''")
+    if "payee_account" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN payee_account VARCHAR(128) DEFAULT ''")
+    if "executor_remarks" not in existing:
+        ddl.append("ALTER TABLE task ADD COLUMN executor_remarks TEXT DEFAULT ''")
     for sql in ddl:
         db.session.execute(db.text(sql))
     if ddl:

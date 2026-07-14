@@ -185,7 +185,9 @@
   <section class="card">
     <div class="card-head">
       <h3>5. 执行人和收款人信息</h3>
+      {% if current_user.role in ['super_admin','supervisor'] %}
       <button type="button" class="btn ghost" id="btn-edit-section5" onclick="toggleSectionEdit('section5')">编辑</button>
+      {% endif %}
     </div>
     <!-- 查看模式 -->
     <div id="section5-view" class="section-view">
@@ -202,13 +204,13 @@
     <!-- 编辑模式 -->
     <div id="section5-edit" class="section-edit hidden">
       <form method="post" action="{{ url_for('update_executor_payee', task_id=task.id) }}" class="grid-form two">
-        <div><label>执行人姓名</label><input name="executor_name" value="{{ task.executor_name }}"></div>
-        <div><label>执行人手机号</label><input name="executor_phone" value="{{ task.executor_phone }}"></div>
-        <div><label>收款人姓名</label><input name="payee_name" value="{{ task.payee_name }}"></div>
-        <div><label>收款人手机号</label><input name="payee_phone" value="{{ task.payee_phone }}"></div>
-        <div><label>开户行</label><input name="payee_bank" value="{{ task.payee_bank }}"></div>
-        <div><label>银行卡/收款账号</label><input name="payee_account" value="{{ task.payee_account }}"></div>
-        <div class="span-2"><label>执行备注</label><textarea name="executor_remarks" rows="3">{{ task.executor_remarks }}</textarea></div>
+        <div><label>执行人姓名</label><input name="executor_name" value="{{ task.executor_name or '' }}"></div>
+        <div><label>执行人手机号</label><input name="executor_phone" value="{{ task.executor_phone or '' }}"></div>
+        <div><label>收款人姓名</label><input name="payee_name" value="{{ task.payee_name or '' }}"></div>
+        <div><label>收款人手机号</label><input name="payee_phone" value="{{ task.payee_phone or '' }}"></div>
+        <div><label>开户行</label><input name="payee_bank" value="{{ task.payee_bank or '' }}"></div>
+        <div><label>银行卡/收款账号</label><input name="payee_account" value="{{ task.payee_account or '' }}"></div>
+        <div class="span-2"><label>执行备注</label><textarea name="executor_remarks" rows="3">{{ task.executor_remarks or '' }}</textarea></div>
         <div class="span-2 right edit-toggle-bar">
           <button type="button" class="btn ghost" onclick="toggleSectionEdit('section5')">取消</button>
           <button class="btn primary">保存执行/收款档案</button>

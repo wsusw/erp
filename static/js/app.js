@@ -120,17 +120,44 @@ function toggleSectionEdit(sectionId) {
 }
 
 // 防止重复提交。延迟禁用，避免浏览器原生必填校验和自定义校验被阻断。
+// 10 秒超时自动恢复 + bfcache 恢复，避免提交失败后按钮永久卡死在"处理中…"。
 document.addEventListener('submit', (event) => {
   const form = event.target;
   if (!(form instanceof HTMLFormElement)) return;
   setTimeout(() => {
     if (event.defaultPrevented) return;
-    form.querySelectorAll('button[type="submit"], button:not([type])').forEach(btn => {
+    const buttons = form.querySelectorAll('button[type="submit"], button:not([type])');
+    buttons.forEach(btn => {
+      if (btn.disabled) return;
       btn.disabled = true;
       btn.dataset.originalText = btn.textContent;
+      btn.dataset.submitBusy = 'true';
       btn.textContent = '处理中…';
     });
+    // 10 秒后自动恢复：覆盖网络超时、服务端报错等未跳转场景
+    const timer = setTimeout(() => {
+      buttons.forEach(btn => {
+        if (btn.dataset.submitBusy === 'true') {
+          btn.disabled = false;
+          btn.textContent = btn.dataset.originalText || btn.textContent;
+          delete btn.dataset.submitBusy;
+        }
+      });
+    }, 10000);
+    // 页面正常跳转时清理定时器
+    window.addEventListener('pagehide', () => clearTimeout(timer), { once: true });
   }, 0);
+});
+
+// 从浏览器 bfcache 恢复页面时，重置可能卡在"处理中…"的按钮
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    document.querySelectorAll('button[data-submit-busy="true"]').forEach(btn => {
+      btn.disabled = false;
+      btn.textContent = btn.dataset.originalText || btn.textContent;
+      delete btn.dataset.submitBusy;
+    });
+  }
 });
 
 // 批量作废确认
