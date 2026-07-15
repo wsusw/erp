@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% set page_title = '批量上传SOP图片' %}
+{% block content %}
+
+<section class="card compact">
+  <div class="card-head">
+    <h3>批量上传 SOP 图片</h3>
+    <div class="head-actions">
+      <a class="btn ghost" href="{{ url_for('tasks') }}">← 返回任务池</a>
+    </div>
+  </div>
+
+  <p class="muted" style="margin-bottom:16px">
+    上传门店 SOP 图片，系统会自动按<strong>文件名</strong>匹配对应门店任务并写入 SOP。
+    文件名需包含门店名称关键词，例如 <code>芜湖银泰城店.jpg</code> 会匹配「卡旺卡(芜湖银泰城店)」。
+  </p>
+
+  <form method="post" enctype="multipart/form-data" class="import-box" style="display:block">
+    <label style="font-weight:600;margin-bottom:8px;display:block">选择 SOP 图片（可多选，支持 jpg / png / gif / webp）</label>
+    <input type="file" name="sop_images" accept=".jpg,.jpeg,.png,.gif,.webp" multiple required
+           style="margin-bottom:12px">
+    <button class="btn primary" type="submit">开始匹配上传</button>
+  </form>
+</section>
+
+{% if tasks %}
+<section class="card compact">
+  <div class="card-head">
+    <h3>待补充 SOP 图片的任务（{{ tasks|length }} 条）</h3>
+    <span class="muted">以下任务的 SOP 内容为空或仅有占位符，等待上传图片</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>工单号</th>
+          <th>门店名称</th>
+          <th>区域</th>
+          <th>状态</th>
+          <th>SOP 当前内容</th>
+          <th>建议图片文件名</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tasks %}
+        <tr>
+          <td><a href="{{ url_for('task_detail', task_id=t.id) }}">{{ t.code }}</a></td>
+          <td>{{ t.store_name }}</td>
+          <td>{{ t.region or '—' }}</td>
+          <td>{{ t.task_status }}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {% if t.task_sop_html and 'DISPIMG' in t.task_sop_html %}
+            <span class="muted">Excel 占位公式</span>
+            {% elif t.task_sop_html %}
+            {{ t.task_sop_html[:60] }}{% if t.task_sop_html|length > 60 %}…{% endif %}
+            {% else %}
+            <span class="muted">空</span>
+            {% endif %}
+          </td>
+          <td><code>{{ t.store_name.replace('(','').replace(')','').replace('（','').replace('）','') }}.jpg</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<section class="card compact">
+  <div class="card-head"><h3>待补充 SOP 图片的任务</h3></div>
+  <p class="muted">🎉 所有任务的 SOP 已包含内容，无需补充图片。</p>
+</section>
+{% endif %}
+
+{% endblock %}

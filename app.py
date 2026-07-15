@@ -435,6 +435,52 @@ def current_employee_id() -> Optional[int]:
     return current_user.employee_id if current_user.is_authenticated else None
 
 
+def resolve_employee_identifier(value: str, field_label: str, expected_role: Optional[str] = None):
+    """将导入表中的员工标识解析为 Employee.id，兼容员工 ID、姓名和登录账号。"""
+    raw = (value or "").strip()
+    if not raw:
+        return None, ""
+
+    role_filter = []
+    if expected_role:
+        role_filter.append(User.role == expected_role)
+
+    role_hint = f"（需为{expected_role}角色）" if expected_role else ""
+
+    if re.fullmatch(r"\d+", raw):
+        emp = Employee.query.get(int(raw))
+        if not emp:
+            return None, f"{field_label}不存在：{raw}，请检查员工ID是否正确，或在「员工管理」中确认该员工已录入"
+        if expected_role and (not emp.user or emp.user.role != expected_role):
+            actual_role = emp.user.role if emp.user else "未绑定账号"
+            return None, f"{field_label}角色不匹配：{raw}，当前角色为「{actual_role}」，期望角色为「{expected_role}」"
+        return emp.id, ""
+
+    user = User.query.filter(User.username == raw).first()
+    if user:
+        if expected_role and user.role != expected_role:
+            return None, f"{field_label}角色不匹配：{raw}，当前角色为「{user.role}」，期望角色为「{expected_role}」，请检查账号角色是否正确"
+        if not user.employee_id:
+            return None, f"{field_label}账号「{raw}」未绑定员工档案，请在「员工管理」中为该账号绑定员工"
+        return user.employee_id, ""
+
+    # 用户名未匹配到，尝试按姓名搜索
+    q = Employee.query
+    if expected_role:
+        q = q.join(User, User.employee_id == Employee.id).filter(*role_filter)
+    matches = q.filter(Employee.name == raw).all()
+    if len(matches) == 1:
+        return matches[0].id, ""
+    if len(matches) > 1:
+        return None, f"{field_label}姓名「{raw}」存在多条记录，请改用登录账号或员工ID填写"
+
+    # 最终未找到：区分是否按姓名搜索过
+    # 如果 raw 看起来像用户名（英文+数字），给出对应提示
+    if re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", raw):
+        return None, f"{field_label}「{raw}」未在系统中注册{role_hint}，请先在「员工管理」中创建账号并绑定员工档案，或改用已存在的员工姓名/ID"
+    return None, f"{field_label}「{raw}」未找到{role_hint}，请确认姓名无误，或改用登录账号/员工ID填写"
+
+
 def visible_tasks_query():
     """按角色返回可见任务。越权问题优先在后端解决，前端只做辅助隐藏。
     已作废任务默认从任务池、统计、导出中隐藏，但数据库和流转记录保留。
@@ -1773,12 +1819,178 @@ def delete_reject_reason(reason_id):
 # ============================================================
 # 批量导入导出与报表
 # ============================================================
+
+def _normalize_for_match(text: str) -> str:
+    """归一化门店名称用于文件名匹配：去括号、空格、特殊符号。"""
+    result = text
+    for ch in "()（）【】[]（）<>《》,，.。、 /-—_":
+        result = result.replace(ch, "")
+    return result.lower()
+
+
+def _match_images_to_tasks(image_files, tasks):
+    """将上传的图片按文件名匹配到任务列表。
+    返回 (matched, unmatched_images, unmatched_tasks) 三元组，
+    其中 matched 是 [(task, image_path), ...] 列表。
+    """
+    matched = []
+    unmatched_images = []
+    remaining_tasks = list(tasks)
+
+    for f in image_files:
+        original_name = f.filename or ""
+        key = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
+        key_norm = _normalize_for_match(key)
+
+        # 第一轮：精确匹配 store_name
+        candidates = []
+        for t in remaining_tasks:
+            tn = _normalize_for_match(t.store_name)
+            if key_norm == tn or key_norm in tn or tn in key_norm:
+                candidates.append(t)
+
+        if len(candidates) == 1:
+            task = candidates[0]
+            path = save_upload_direct(f)
+            if path:
+                matched.append((task, path))
+                remaining_tasks.remove(task)
+                continue
+        elif len(candidates) > 1:
+            # 在候选中选最短名（最精确）
+            best = min(candidates, key=lambda t: len(t.store_name))
+            path = save_upload_direct(f)
+            if path:
+                matched.append((best, path))
+                remaining_tasks.remove(best)
+                continue
+
+        unmatched_images.append(original_name)
+
+    return matched, unmatched_images, remaining_tasks
+
+
+def save_upload_direct(file, max_dimension: int = 1920, quality: int = 80) -> str:
+    """直接保存上传文件，图片自动压缩以节省存储，返回相对路径。"""
+    original_filename = file.filename or "upload"
+    ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        return ""
+    filename = secure_filename(original_filename)
+    if not filename:
+        filename = f"upload_{secrets.token_hex(4)}.{ext}"
+    folder = os.path.join(app.config["UPLOAD_FOLDER"], "general")
+    os.makedirs(folder, exist_ok=True)
+
+    image_exts = {"jpg", "jpeg", "png", "webp", "gif"}
+    if ext in image_exts:
+        try:
+            from PIL import Image as PILImage
+            img = PILImage.open(file.stream)
+            # 缩放：长边不超过 max_dimension
+            w, h = img.size
+            if w > max_dimension or h > max_dimension:
+                ratio = max_dimension / max(w, h)
+                img = img.resize((int(w * ratio), int(h * ratio)), PILImage.LANCZOS)
+            # 转 RGB（RGBA/P 模式无法直接存 JPEG）
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGBA")
+                background = PILImage.new("RGBA", img.size, (255, 255, 255, 255))
+                img = PILImage.alpha_composite(background, img).convert("RGB")
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+            # 统一存为 JPEG（压缩率高，视觉损失小）
+            stored_name = f"{utc_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(5)}_{filename.rsplit('.', 1)[0]}.jpg"
+            img.save(os.path.join(folder, stored_name), "JPEG", quality=quality, optimize=True)
+            return f"general/{stored_name}"
+        except Exception:
+            pass  # 压缩失败则回退到原始保存
+
+    stored_name = f"{utc_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(5)}_{filename}"
+    file.save(os.path.join(folder, stored_name))
+    return f"general/{stored_name}"
+
+
+@app.route("/tasks/batch-sop-images", methods=["GET"])
+@login_required
+@role_required("super_admin", "supervisor")
+def batch_sop_images_page():
+    """批量上传 SOP 图片页面：列出需要补充 SOP 图片的任务。"""
+    tasks = (
+        visible_tasks_query()
+        .filter(
+            or_(
+                Task.task_sop_html.is_(None),
+                Task.task_sop_html == "",
+                Task.task_sop_html.like("%DISPIMG%"),
+            )
+        )
+        .order_by(Task.created_at.desc())
+        .all()
+    )
+    return render_template("batch_sop_images.html", tasks=tasks, TASK_STATUSES=TASK_STATUSES)
+
+
+@app.route("/tasks/batch-sop-images", methods=["POST"])
+@login_required
+@role_required("super_admin", "supervisor")
+def batch_sop_images_upload():
+    """处理批量 SOP 图片上传，按文件名匹配门店任务。"""
+    files = request.files.getlist("sop_images")
+    valid_files = [f for f in files if f and f.filename]
+    if not valid_files:
+        flash("❌ 请至少选择一个图片文件", "danger")
+        return redirect(url_for("batch_sop_images_page"))
+
+    tasks = (
+        visible_tasks_query()
+        .filter(
+            or_(
+                Task.task_sop_html.is_(None),
+                Task.task_sop_html == "",
+                Task.task_sop_html.like("%DISPIMG%"),
+            )
+        )
+        .all()
+    )
+
+    matched, unmatched_images, unmatched_tasks = _match_images_to_tasks(valid_files, tasks)
+
+    # 更新匹配成功的任务
+    updated_count = 0
+    for task, image_path in matched:
+        img_tag = f'<img src="/uploads/{image_path}" alt="SOP">'
+        if task.task_sop_html and task.task_sop_html.strip() and "DISPIMG" not in task.task_sop_html:
+            task.task_sop_html = task.task_sop_html + "<br>" + img_tag
+        else:
+            task.task_sop_html = img_tag
+        add_flow(task, "批量上传SOP图片", after=f"匹配门店：{task.store_name}")
+        updated_count += 1
+
+    db.session.commit()
+
+    # 构建结果消息
+    msg_parts = [f"✅ 匹配成功 {updated_count} 条"]
+    if unmatched_images:
+        msg_parts.append(f"⚠️ 未匹配图片 {len(unmatched_images)} 个：{'、'.join(unmatched_images[:5])}")
+        if len(unmatched_images) > 5:
+            msg_parts[-1] += f"等 {len(unmatched_images)} 个"
+    if unmatched_tasks:
+        msg_parts.append(f"⚠️ 未匹配任务 {len(unmatched_tasks)} 个：{'、'.join(t.store_name for t in unmatched_tasks[:5])}")
+        if len(unmatched_tasks) > 5:
+            msg_parts[-1] += f"等 {len(unmatched_tasks)} 个"
+
+    flash("；".join(msg_parts), "success" if updated_count > 0 else "warning")
+    log_operation("批量上传SOP图片", "门店任务", f"匹配 {updated_count} 条，未匹配图片 {len(unmatched_images)}，未匹配任务 {len(unmatched_tasks)}")
+    return redirect(url_for("batch_sop_images_page"))
+
+
 @app.route("/tasks/template")
 @login_required
 @role_required("super_admin", "supervisor")
 def task_import_template():
-    headers = ["store_name", "region", "address", "urgency", "start_time", "end_time", "payment_base_price", "agency_price", "supervisor_id", "operator_id", "store_remarks", "task_sop_html"]
-    rows = [["示例门店-请删除本行", "华东一区", "上海市示例路100号", "一般", date.today().strftime("%Y-%m-%d"), date.today().strftime("%Y-%m-%d"), "50", "80", "", "", "备注", "<p>到店执行 SOP</p>"]]
+    headers = ["store_name", "region", "address", "urgency", "start_time", "end_time", "payment_base_price", "agency_price", "supervisor_name", "operator_name", "store_remarks"]
+    rows = [["示例门店-请删除本行", "华东一区", "上海市示例路100号", "一般", date.today().strftime("%Y-%m-%d"), date.today().strftime("%Y-%m-%d"), "50", "80", "李主管", "王运营", "备注"]]
     return export_csv("task_import_template.csv", headers, rows)
 
 
@@ -1852,8 +2064,27 @@ def import_tasks():
                 if agency_price is None or agency_price < 0:
                     failed.append(f"第 {line_no} 行：代理价格格式错误或不能为负数")
                     continue
-        supervisor_id = row.get("supervisor_id") or (current_employee_id() if current_user.role == "supervisor" else None)
-        operator_id = row.get("operator_id") or None
+        supervisor_raw = row.get("supervisor_name") or row.get("supervisor_id") or ""
+        operator_raw = row.get("operator_name") or row.get("operator_id") or ""
+        supervisor_id, supervisor_error = resolve_employee_identifier(supervisor_raw, "指派主管", "supervisor")
+        if supervisor_error:
+            failed.append(f"第 {line_no} 行：{supervisor_error}")
+            continue
+        if not supervisor_id and current_user.role == "supervisor":
+            supervisor_id = current_employee_id()
+        operator_id, operator_error = resolve_employee_identifier(operator_raw, "指派运营", "operator")
+        if operator_error:
+            failed.append(f"第 {line_no} 行：{operator_error}")
+            continue
+        if current_user.role == "supervisor":
+            if supervisor_id and supervisor_id != current_employee_id():
+                failed.append(f"第 {line_no} 行：主管账号只能导入到自己名下")
+                continue
+            if operator_id:
+                operator = Employee.query.get(operator_id)
+                if not operator or operator.supervisor_id != current_employee_id():
+                    failed.append(f"第 {line_no} 行：指派运营不在当前主管分管范围内")
+                    continue
         try:
             raw_pid = (row.get("project_id") or "").strip()
             project_id = int(raw_pid) if raw_pid else 1
@@ -1866,8 +2097,8 @@ def import_tasks():
                 code=f"XF{utc_now().strftime('%Y%m%d%H%M%S')}{secrets.token_hex(2).upper()}",
                 project_id=project_id,
                 creator_id=current_user.id,
-                supervisor_id=int(supervisor_id) if supervisor_id else None,
-                operator_id=int(operator_id) if operator_id else None,
+                supervisor_id=supervisor_id,
+                operator_id=operator_id,
                 store_name=store_name,
                 region=(row.get("region") or "未分区").strip() or "未分区",
                 address=(row.get("address") or "").strip(),

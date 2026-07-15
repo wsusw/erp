@@ -10,7 +10,7 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 os.environ["DATABASE_URL"] = "sqlite:///" + os.path.join(BASE_DIR, "xf_erp_test.db")
 os.environ["ERP_SECRET_KEY"] = "test-secret"
 
-from app import app, db, seed_data, Task, User, RejectReason  # noqa: E402
+from app import app, db, seed_data, Employee, Task, User, RejectReason  # noqa: E402
 
 
 def assert_ok(condition, message):
@@ -145,6 +145,42 @@ def main():
 
     r = client.get("/tasks/template")
     assert_ok(b"agency_price" in r.data, "批量导入模板包含代理价格 agency_price 字段")
+    assert_ok(b"supervisor_name" in r.data and b"operator_name" in r.data, "批量导入模板使用姓名字段")
+    r = client.post(
+        "/tasks/import",
+        data={
+            "csv_file": (
+                BytesIO(
+                    "store_name,region,address,urgency,start_time,end_time,payment_base_price,agency_price,supervisor_name,operator_name,store_remarks,task_sop_html\n"
+                    "姓名导入门店,华东一区,上海市测试路1号,一般,2026-07-18,2026-07-25,35,80,李主管,王运营,备注,<p>SOP</p>\n".encode("utf-8")
+                ),
+                "tasks-by-name.csv",
+            )
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert_ok(r.status_code == 200 and "成功 1 条".encode("utf-8") in r.data, "批量导入可按员工姓名识别主管和运营")
+    with app.app_context():
+        imported = Task.query.filter_by(store_name="姓名导入门店").first()
+        supervisor_emp = Employee.query.filter_by(name="李主管").first()
+        operator_emp = Employee.query.filter_by(name="王运营").first()
+        assert_ok(imported and imported.supervisor_id == supervisor_emp.id and imported.operator_id == operator_emp.id, "姓名导入写入正确员工ID")
+    r = client.post(
+        "/tasks/import",
+        data={
+            "csv_file": (
+                BytesIO(
+                    "store_name,region,address,urgency,start_time,end_time,payment_base_price,agency_price,supervisor_id,operator_id,store_remarks,task_sop_html\n"
+                    "账号兼容导入门店,华东一区,上海市测试路2号,一般,2026-07-18,2026-07-25,35,80,supervisor,operator,备注,<p>SOP</p>\n".encode("utf-8")
+                ),
+                "tasks-by-legacy-account.csv",
+            )
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert_ok(r.status_code == 200 and "成功 1 条".encode("utf-8") in r.data, "旧 supervisor_id/operator_id 列可兼容登录账号")
     r = client.get("/tasks")
     assert_ok(b"min_agency" not in r.data and b"max_agency" not in r.data, "任务筛选区不显示代理价格筛选字段")
     assert_ok("待确认".encode("utf-8") in r.data, "任务筛选区包含待确认状态")
