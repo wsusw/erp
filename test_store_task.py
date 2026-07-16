@@ -332,16 +332,26 @@ def test_permission():
     assert 'btn-edit-section5' in r.data.decode("utf-8") or fail("超管应看到编辑按钮")
     ok("超管可见编辑按钮")
 
-    # 4.2 运营不可见编辑按钮
+    # 4.2 运营也可见编辑按钮（开放全部等级编辑）
     print("\n[4.2] 运营")
     client.get("/logout", follow_redirects=True)
     client.post("/login", data={"username": "operator", "password": "operator123"}, follow_redirects=True)
     r = client.get(f"/tasks/{task_id}")
     html = r.data.decode("utf-8")
-    if 'btn-edit-section5' in html:
-        fail("运营不应看到编辑按钮（P1 修复后）")
+    if r.status_code == 200 and 'section5-view' in html:
+        assert 'btn-edit-section5' in html or fail("运营应看到编辑按钮（开放全部等级编辑后）")
+        r2 = client.post(f"/tasks/{task_id}/executor",
+                         data={"executor_name": "运营编辑", "executor_phone": "", "payee_name": "",
+                               "payee_phone": "", "payee_bank": "", "payee_account": "",
+                               "executor_remarks": ""},
+                         follow_redirects=True)
+        assert r2.status_code == 200 or fail(f"运营保存失败: {r2.status_code}")
+        with app.app_context():
+            t = db.session.get(Task, task_id)
+            assert t.executor_name == "运营编辑" or fail("运营编辑未生效")
+        ok("运营可见编辑按钮且可保存 ✓")
     else:
-        ok("运营不可见编辑按钮 ✓")
+        warn("运营账号无该任务可见权限，跳过按钮校验")
 
     # 4.3 主管可见
     print("\n[4.3] 主管")

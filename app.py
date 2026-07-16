@@ -15,7 +15,7 @@ from flask_login import (
     LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 )
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import and_, or_
+from sqlalchemy import or_
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -1068,7 +1068,7 @@ def update_sop(task_id):
 @login_required
 def update_executor_payee(task_id):
     task = Task.query.get_or_404(task_id)
-    if current_user.role != "super_admin":
+    if not can_access_task(task):
         abort(403)
     before = f"执行人：{task.executor_name}/{task.executor_phone}；收款人：{task.payee_name}/{task.payee_phone}/{task.payee_bank}/{task.payee_account}"
     task.executor_name = request.form.get("executor_name", "").strip()
