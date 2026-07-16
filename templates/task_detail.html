@@ -150,7 +150,7 @@
     {% endif %}
 
     <label>专属确认链接</label>
-    <input id="confirmationLink" readonly value="{{ url_for('confirm_execution', token=task.confirmation_token, _external=True) }}" onclick="this.select()">
+    <input id="confirmationLink" readonly value="{{ url_for('confirm_execution', token=task.confirmation_token, _external=True) if task.confirmation_token else '尚未生成确认链接，请先点击“发起门店执行确认”' }}" onclick="this.select()">
 
     <div class="kv"><span>发起时间</span><strong>{{ task.confirmation_started_at.strftime('%Y-%m-%d %H:%M') if task.confirmation_started_at else '未发起' }}</strong></div>
     <div class="kv"><span>发送对象</span><strong>{{ task.confirmation_sent_to or '未标记发送' }}</strong></div>

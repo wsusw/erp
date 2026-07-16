@@ -611,6 +611,7 @@ def apply_task_filters(q):
     min_price = request.args.get("min_price", "").strip()
     max_price = request.args.get("max_price", "").strip()
     operator_id = request.args.get("operator_id", "").strip()
+    confirmation = request.args.get("confirmation", "").strip()
     if keyword:
         like = f"%{keyword}%"
         q = q.filter(or_(Task.code.like(like), Task.store_name.like(like), Task.address.like(like), Task.region.like(like)))
@@ -628,6 +629,8 @@ def apply_task_filters(q):
         q = q.filter((Task.payment_base_price + Task.approved_extra_price) <= parse_float(max_price))
     if operator_id:
         q = q.filter(Task.operator_id == int(operator_id))
+    if confirmation:
+        q = q.filter(Task.confirmation_status == confirmation)
     return q
 
 
@@ -2264,7 +2267,7 @@ def export_confirmations():
             t.code, t.store_name, t.confirmation_status, t.confirmation_note, t.confirmation_submitted_at,
             t.confirmation_sent_to, t.confirmation_sent_at, t.confirmation_review_status,
             t.confirmation_review_note, t.confirmation_reviewed_at,
-            t.confirmation_screenshot, url_for("confirm_execution", token=t.confirmation_token, _external=True)
+            t.confirmation_screenshot, url_for("confirm_execution", token=t.confirmation_token, _external=True) if t.confirmation_token else ""
         ])
     return export_csv(
         "confirmations.csv",
