@@ -1032,7 +1032,8 @@ def accept_task(task_id):
             return redirect(url_for("task_detail", task_id=task.id))
         task.task_status = "进行中"
     else:
-        abort(403)
+        flash("❌ 只有任务指派的负责人才能承接该任务", "danger")
+        return redirect(url_for("task_detail", task_id=task.id))
     add_flow(task, "任务承接确认", before, task.task_status)
     db.session.commit()
     flash("✅ 已确认承接", "success")
@@ -1067,7 +1068,7 @@ def update_sop(task_id):
 @login_required
 def update_executor_payee(task_id):
     task = Task.query.get_or_404(task_id)
-    if not can_manage_task(task):
+    if current_user.role != "super_admin":
         abort(403)
     before = f"执行人：{task.executor_name}/{task.executor_phone}；收款人：{task.payee_name}/{task.payee_phone}/{task.payee_bank}/{task.payee_account}"
     task.executor_name = request.form.get("executor_name", "").strip()

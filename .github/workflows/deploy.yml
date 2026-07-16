@@ -21,7 +21,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           # 🔥 关键修复：将命令超时时间延长到 10 分钟，避免因网络慢被中断
-          command_timeout: 10m
+          command_timeout: 20m
           script: |
             set -e
             cd /srv/erp

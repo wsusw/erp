@@ -8,7 +8,7 @@
     <p>{{ task.address }}</p>
   </div>
   <div class="detail-actions">
-    {% if current_user.role in ['supervisor','operator'] and task.task_status in ['待主管承接','待运营承接'] %}
+    {% if (current_user.role == 'supervisor' and task.supervisor_id == current_user.employee_id and task.task_status == '待主管承接') or (current_user.role == 'operator' and task.operator_id == current_user.employee_id and task.task_status == '待运营承接') %}
     <form method="post" action="{{ url_for('accept_task', task_id=task.id) }}"><button class="btn primary">确认承接</button></form>
     {% endif %}
     {% if current_user.role in ['super_admin','supervisor'] and task.task_status not in ['已完成','放弃执行','已作废'] %}
@@ -185,7 +185,7 @@
   <section class="card">
     <div class="card-head">
       <h3>5. 执行人和收款人信息</h3>
-      {% if current_user.role in ['super_admin','supervisor'] %}
+      {% if current_user.role == 'super_admin' %}
       <button type="button" class="btn ghost" id="btn-edit-section5" onclick="toggleSectionEdit('section5')">编辑</button>
       {% endif %}
     </div>
