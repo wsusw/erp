@@ -15,7 +15,7 @@
   <div class="stat-card"><span class="stat-icon orange">!</span><small>待审核</small><strong>{{ stats.pending_audit }}</strong></div>
   <div class="stat-card"><span class="stat-icon red">⏱</span><small>逾期未完成</small><strong>{{ stats.overdue }}</strong></div>
   <div class="stat-card"><span class="stat-icon orange">¥</span><small>价格待批</small><strong>{{ stats.price_pending }}</strong></div>
-  <div class="stat-card"><span class="stat-icon orange">↗</span><small>路费待批</small><strong>{{ stats.travel_pending }}</strong></div>
+  <a class="stat-card" href="{{ url_for('tasks', travel_pending=1) }}" style="text-decoration:none;color:inherit;"><span class="stat-icon orange">↗</span><small>路费待批</small><strong>{{ stats.travel_pending }}</strong></a>
   <div class="stat-card"><span class="stat-icon blue">¥</span><small>打款总价</small><strong>¥{{ '%.2f'|format(stats.total_payment) }}</strong></div>
   {% if current_user.role == 'super_admin' %}
   <div class="stat-card"><span class="stat-icon blue">◇</span><small>代理总价</small><strong>¥{{ '%.2f'|format(stats.agency_total or 0) }}</strong></div>

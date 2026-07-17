@@ -39,8 +39,34 @@
 </section>
 {% else %}
 <section class="card compact">
-  <div class="card-head"><h3>我的任务池</h3></div>
-  <p class="muted">运营账号按照需求文档仅承接主管指派的暗访任务，不能主动新建门店任务。如需新增任务，请联系主管或超级管理员。</p>
+  <div class="card-head">
+    <h3>我的任务池</h3>
+    {% if pending_accept_count > 0 %}
+    <div class="head-actions">
+      <form method="post" action="{{ url_for('batch_accept_tasks') }}" onsubmit="return confirm('确认一键承接全部 {{ pending_accept_count }} 个待承接任务？')">
+        <button class="btn primary" type="submit">一键承接（{{ pending_accept_count }}）</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% if pending_tasks %}
+  <div class="apple-list">
+    {% for t in pending_tasks %}
+    <a class="list-row" href="{{ url_for('task_detail', task_id=t.id) }}">
+      <div>
+        <strong>{{ t.store_name }}</strong>
+        <small>{{ t.code }} · {{ t.region }}</small>
+      </div>
+      <div class="row-right">
+        <small>{{ t.start_time }} ~ {{ t.end_time }}</small>
+        {% if t.is_overdue %}<span class="tag red">已逾期</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">暂无待承接任务。如需新增任务，请联系主管或超级管理员。</p>
+  {% endif %}
 </section>
 {% endif %}
 

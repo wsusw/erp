@@ -631,6 +631,8 @@ def apply_task_filters(q):
         q = q.filter(Task.operator_id == int(operator_id))
     if confirmation:
         q = q.filter(Task.confirmation_status == confirmation)
+    if request.args.get("travel_pending") == "1":
+        q = q.filter(Task.travel_subsidies.any(TravelSubsidy.status.in_(["待主管审批", "主管已通过待超管审批"])))
     return q
 
 
@@ -870,9 +872,17 @@ def tasks():
     projects = Project.query.order_by(Project.project_name.asc()).all()
     supervisors = allowed_supervisors_for_current_user()
     operators = allowed_operators_for_current_user()
+    pending_accept_count = 0
+    pending_tasks = []
+    if current_user.role == "operator":
+        pending_tasks = visible_tasks_query().filter(
+            Task.operator_id == current_employee_id(),
+            Task.task_status == "待运营承接"
+        ).order_by(Task.created_at.desc()).all()
+        pending_accept_count = len(pending_tasks)
     if request.headers.get("HX-Request"):
-        return render_template("_tasks_results.html", tasks=tasks_list, operators=operators)
-    return render_template("tasks.html", tasks=tasks_list, projects=projects, supervisors=supervisors, operators=operators)
+        return render_template("_tasks_results.html", tasks=tasks_list, operators=operators, pending_accept_count=pending_accept_count)
+    return render_template("tasks.html", tasks=tasks_list, projects=projects, supervisors=supervisors, operators=operators, pending_accept_count=pending_accept_count, pending_tasks=pending_tasks)
 
 
 @app.route("/tasks/create", methods=["POST"])
@@ -1041,6 +1051,30 @@ def accept_task(task_id):
     db.session.commit()
     flash("✅ 已确认承接", "success")
     return redirect(url_for("task_detail", task_id=task.id))
+
+
+@app.route("/tasks/batch-accept", methods=["POST"])
+@login_required
+@role_required("operator")
+def batch_accept_tasks():
+    tasks = visible_tasks_query().filter(
+        Task.operator_id == current_employee_id(),
+        Task.task_status == "待运营承接"
+    ).all()
+
+    if not tasks:
+        flash("没有待承接的任务", "info")
+        return redirect(url_for("tasks"))
+
+    count = 0
+    for task in tasks:
+        add_flow(task, "一键承接", "待运营承接", "进行中")
+        task.task_status = "进行中"
+        count += 1
+
+    db.session.commit()
+    flash(f"✅ 已一键承接 {count} 个门店任务", "success")
+    return redirect(url_for("tasks"))
 
 
 @app.route("/tasks/<int:task_id>/sop", methods=["POST"])
@@ -2167,7 +2201,8 @@ def batch_update_tasks():
             task.end_time = parse_date(end_time, task.end_time)
         if operator_id:
             task.operator_id = int(operator_id)
-            if not task_status:
+            # 指派运营后自动推进状态，避免「运营已分配但状态仍是待主管承接」的矛盾
+            if task.task_status in ("待主管承接", "待主管分配"):
                 task.task_status = "待运营承接"
         if task_status:
             task.task_status = task_status

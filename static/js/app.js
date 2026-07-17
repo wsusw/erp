@@ -24,7 +24,28 @@ function toggleBox(id) {
 
 function checkAll(source) {
   document.querySelectorAll('input[name="task_ids"]').forEach(cb => cb.checked = source.checked);
+  updateSelectedCount();
 }
+
+function updateSelectedCount() {
+  const checked = document.querySelectorAll('input[name="task_ids"]:checked');
+  const badge = document.getElementById('selected-count');
+  const num = document.getElementById('selected-num');
+  if (!badge || !num) return;
+  if (checked.length > 0) {
+    num.textContent = checked.length;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// 事件委托：勾选 / 取消勾选时自动更新计数（兼容 HTMX 动态替换 DOM）
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.name === 'task_ids') {
+    updateSelectedCount();
+  }
+});
 
 function fillComment(select, targetId) {
   const target = document.getElementById(targetId);
