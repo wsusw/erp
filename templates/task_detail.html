@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% set page_title = '任务详情 · ' ~ task.store_name %}
+{% set page_title = ('编辑任务 · ' if edit_mode else '任务详情 · ') ~ task.store_name %}
 {% block content %}
 <div class="detail-header">
   <div>
@@ -33,10 +33,13 @@
   <section class="card">
     <div class="card-head">
       <h3>1. 门店档案</h3>
-      <button type="button" class="btn ghost" id="btn-edit-section1" onclick="toggleSectionEdit('section1')">编辑</button>
+      <div class="head-actions">
+        <button type="button" class="btn {{ 'danger' if edit_mode else 'ghost' }}" id="btn-edit-section1" onclick="toggleSectionEdit('section1')">{{ '取消编辑' if edit_mode else '编辑' }}</button>
+        {% if not edit_mode %}<a class="btn ghost" href="{{ url_for('task_edit_page', task_id=task.id) }}" target="_blank" title="在新标签页中编辑">↗ 新标签页编辑</a>{% endif %}
+      </div>
     </div>
     <!-- 查看模式 -->
-    <div id="section1-view" class="section-view">
+    <div id="section1-view" class="section-view{{ ' hidden' if edit_mode else '' }}">
       <div class="info-grid two">
         <div class="info-item"><label>门店名称</label><strong>{{ task.store_name }}</strong></div>
         <div class="info-item"><label>区域</label><strong>{{ task.region }}</strong></div>
@@ -50,7 +53,7 @@
       </div>
     </div>
     <!-- 编辑模式 -->
-    <div id="section1-edit" class="section-edit hidden">
+    <div id="section1-edit" class="section-edit{{ '' if edit_mode else ' hidden' }}">
       <form method="post" action="{{ url_for('update_task_basic', task_id=task.id) }}" class="grid-form two">
         <div><label>门店名称</label><input name="store_name" value="{{ task.store_name }}"></div>
         <div><label>区域</label><input name="region" value="{{ task.region }}"></div>
@@ -73,11 +76,14 @@
     <div class="card-head">
       <h3>2. 指派与状态</h3>
       {% if current_user.role in ['super_admin','supervisor'] %}
-      <button type="button" class="btn ghost" id="btn-edit-section2" onclick="toggleSectionEdit('section2')">编辑</button>
+      <div class="head-actions">
+        <button type="button" class="btn {{ 'danger' if edit_mode else 'ghost' }}" id="btn-edit-section2" onclick="toggleSectionEdit('section2')">{{ '取消编辑' if edit_mode else '编辑' }}</button>
+        {% if not edit_mode %}<a class="btn ghost" href="{{ url_for('task_edit_page', task_id=task.id) }}" target="_blank" title="在新标签页中编辑">↗ 新标签页编辑</a>{% endif %}
+      </div>
       {% endif %}
     </div>
     <!-- 查看模式（所有角色） -->
-    <div id="section2-view" class="section-view">
+    <div id="section2-view" class="section-view{{ ' hidden' if edit_mode else '' }}">
       <div class="kv"><span>主管</span><strong>{{ task.supervisor.name if task.supervisor else '未分配' }}</strong></div>
       <div class="kv"><span>运营</span><strong>{{ task.operator.name if task.operator else '未分配' }}</strong></div>
       <div class="kv"><span>任务状态</span><strong>{{ task.task_status }}</strong></div>
@@ -91,7 +97,7 @@
     </div>
     {% if current_user.role in ['super_admin','supervisor'] %}
     <!-- 编辑模式 -->
-    <div id="section2-edit" class="section-edit hidden">
+    <div id="section2-edit" class="section-edit{{ '' if edit_mode else ' hidden' }}">
       <form method="post" action="{{ url_for('assign_task', task_id=task.id) }}" class="grid-form two">
         {% if current_user.role == 'super_admin' %}<div><label>主管</label><select name="supervisor_id"><option value="">未分配</option>{% for e in supervisors %}<option value="{{ e.id }}" {% if task.supervisor_id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select></div>{% endif %}
         <div><label>运营</label><select name="operator_id"><option value="">未分配</option>{% for e in operators %}<option value="{{ e.id }}" {% if task.operator_id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select></div>
@@ -185,10 +191,13 @@
   <section class="card">
     <div class="card-head">
       <h3>5. 执行人和收款人信息</h3>
-      <button type="button" class="btn ghost" id="btn-edit-section5" onclick="toggleSectionEdit('section5')">编辑</button>
+      <div class="head-actions">
+        <button type="button" class="btn {{ 'danger' if edit_mode else 'ghost' }}" id="btn-edit-section5" onclick="toggleSectionEdit('section5')">{{ '取消编辑' if edit_mode else '编辑' }}</button>
+        {% if not edit_mode %}<a class="btn ghost" href="{{ url_for('task_edit_page', task_id=task.id) }}" target="_blank" title="在新标签页中编辑">↗ 新标签页编辑</a>{% endif %}
+      </div>
     </div>
     <!-- 查看模式 -->
-    <div id="section5-view" class="section-view">
+    <div id="section5-view" class="section-view{{ ' hidden' if edit_mode else '' }}">
       <div class="info-grid two">
         <div class="info-item"><label>执行人姓名</label><strong>{{ task.executor_name or '—' }}</strong></div>
         <div class="info-item"><label>执行人手机号</label><strong>{{ task.executor_phone or '—' }}</strong></div>
@@ -200,7 +209,7 @@
       </div>
     </div>
     <!-- 编辑模式 -->
-    <div id="section5-edit" class="section-edit hidden">
+    <div id="section5-edit" class="section-edit{{ '' if edit_mode else ' hidden' }}">
       <form method="post" action="{{ url_for('update_executor_payee', task_id=task.id) }}" class="grid-form two">
         <div><label>执行人姓名</label><input name="executor_name" value="{{ task.executor_name or '' }}"></div>
         <div><label>执行人手机号</label><input name="executor_phone" value="{{ task.executor_phone or '' }}"></div>

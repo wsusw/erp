@@ -885,6 +885,16 @@ def tasks():
     return render_template("tasks.html", tasks=tasks_list, projects=projects, supervisors=supervisors, operators=operators, pending_accept_count=pending_accept_count, pending_tasks=pending_tasks)
 
 
+@app.route("/tasks/create", methods=["GET"])
+@login_required
+@role_required("super_admin", "supervisor")
+def task_create_page():
+    """独立的任务创建页面（新标签页打开）。"""
+    supervisors = allowed_supervisors_for_current_user()
+    operators = allowed_operators_for_current_user()
+    return render_template("task_create.html", supervisors=supervisors, operators=operators)
+
+
 @app.route("/tasks/create", methods=["POST"])
 @login_required
 @role_required("super_admin", "supervisor")
@@ -962,6 +972,29 @@ def task_detail(task_id):
         supervisors=supervisors,
         operators=operators,
         reject_reasons=reject_reasons,
+        edit_mode=False,
+    )
+
+
+@app.route("/tasks/<int:task_id>/edit")
+@login_required
+def task_edit_page(task_id):
+    """独立的任务编辑页面（新标签页打开），所有 section 默认处于编辑模式。"""
+    task = Task.query.get_or_404(task_id)
+    if not can_access_task(task):
+        abort(403)
+    projects = Project.query.order_by(Project.project_name.asc()).all()
+    supervisors = allowed_supervisors_for_current_user()
+    operators = allowed_operators_for_current_user()
+    reject_reasons = RejectReason.query.filter_by(user_id=current_user.id).order_by(RejectReason.created_at.desc()).all()
+    return render_template(
+        "task_detail.html",
+        task=task,
+        projects=projects,
+        supervisors=supervisors,
+        operators=operators,
+        reject_reasons=reject_reasons,
+        edit_mode=True,
     )
 
 

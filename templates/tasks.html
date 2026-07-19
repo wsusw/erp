@@ -6,30 +6,12 @@
   <div class="card-head">
     <h3>新建门店任务</h3>
     <div class="head-actions">
+      <a class="btn primary" href="{{ url_for('task_create_page') }}" target="_blank">新建门店任务</a>
       <a class="btn ghost" href="{{ url_for('task_import_template') }}">下载导入模板</a>
       <button class="btn ghost" type="button" onclick="toggleBox('importBox')">批量导入</button>
       <a class="btn ghost" href="{{ url_for('batch_sop_images_page') }}">批量上传SOP图片</a>
     </div>
   </div>
-  <form method="post" action="{{ url_for('create_task') }}" class="grid-form">
-    <div><label>门店名称</label><input name="store_name" required placeholder="例如：南京西路店"></div>
-    <div><label>区域</label><input name="region" placeholder="例如：华东一区"></div>
-    <div><label>紧急度</label><select name="urgency"><option>一般</option><option>紧急</option></select></div>
-    <div><label>开始时间</label><input type="date" name="start_time" required></div>
-    <div><label>截止时间</label><input type="date" name="end_time" required></div>
-    <div class="span-2"><label>详细地址</label><input name="address" placeholder="门店详细地址"></div>
-    <div><label>打款基准价</label><input type="number" step="0.01" name="payment_base_price" value="0"></div>
-    {% if current_user.role == 'super_admin' %}<div><label>代理价（仅超管可见）</label><input type="number" step="0.01" name="agency_price"></div>{% endif %}
-    {% if current_user.role in ['super_admin','supervisor'] %}
-    <div><label>指派主管</label><select name="supervisor_id"><option value="">暂不指派</option>{% for e in supervisors %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
-    {% endif %}
-    {% if current_user.role in ['super_admin', 'supervisor'] %}
-    <div><label>指派运营</label><select name="operator_id"><option value="">暂不指派</option>{% for e in operators %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
-    {% endif %}
-    <div class="span-2"><label>门店备注</label><input name="store_remarks" placeholder="内部备注"></div>
-    <div class="span-4"><label>SOP 内容（支持 HTML / 富文本粘贴）</label><textarea name="task_sop_html" rows="3" placeholder="填写本次暗访任务 SOP"></textarea></div>
-    <div class="span-4 right"><button class="btn primary" type="submit">生成门店任务</button></div>
-  </form>
 
   <form id="importBox" class="hidden import-box" method="post" action="{{ url_for('import_tasks') }}" enctype="multipart/form-data">
     <label>选择 CSV 文件</label>

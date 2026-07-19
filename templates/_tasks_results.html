@@ -47,7 +47,7 @@
           <td>{% set travel_total = t.travel_subsidies | sum(attribute='amount') if t.travel_subsidies else 0 %}{% if travel_total > 0 %}¥{{ '%.2f'|format(travel_total) }}<small>{{ t.travel_subsidies|length }}笔</small>{% else %}—{% endif %}</td>
           <td><span class="tag orange">{{ t.confirmation_status }}</span></td>
           <td class="row-actions">
-            <a class="round-action" href="{{ url_for('task_detail', task_id=t.id) }}" title="查看详情">···</a>
+            <a class="round-action" href="{{ url_for('task_detail', task_id=t.id) }}" target="_blank" title="查看详情（新标签页）">···</a>
             {% if current_user.role in ['super_admin','supervisor'] and t.task_status not in ['已完成','放弃执行','已作废'] %}
             <button class="round-action danger-action" type="submit"
                     formaction="{{ url_for('void_task', task_id=t.id) }}"
