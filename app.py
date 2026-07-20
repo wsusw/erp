@@ -508,7 +508,17 @@ def can_manage_task(task: Task) -> bool:
     if current_user.role == "super_admin":
         return True
     if current_user.role == "supervisor":
-        return task.supervisor_id == current_employee_id()
+        emp_id = current_employee_id()
+        if not emp_id:
+            return False
+        if task.supervisor_id == emp_id:
+            return True
+        # 主管也可以管理下属运营被分配的任务
+        if task.operator_id:
+            op = Employee.query.get(task.operator_id)
+            if op and op.supervisor_id == emp_id:
+                return True
+        return False
     if current_user.role == "operator":
         return task.operator_id == current_employee_id() or task.creator_id == current_user.id
     return False
