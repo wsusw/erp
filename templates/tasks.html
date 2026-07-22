@@ -64,7 +64,7 @@
     <select name="status"><option value="">全部状态</option>{% for s in TASK_STATUSES %}<option value="{{ s }}" {% if request.args.get('status')==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
     <select name="urgency"><option value="">全部紧急度</option><option {% if request.args.get('urgency')=='一般' %}selected{% endif %}>一般</option><option {% if request.args.get('urgency')=='紧急' %}selected{% endif %}>紧急</option></select>
     <select name="operator_id"><option value="">全部运营</option>{% for e in operators %}<option value="{{ e.id }}" {% if request.args.get('operator_id')==e.id|string %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select>
-    <select name="confirmation"><option value="">第三方确认（全部）</option>{% for s in CONFIRMATION_STATUSES if s != '未确认' %}<option value="{{ s }}" {% if request.args.get('confirmation')==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+    <select name="confirmation"><option value="">第三方确认（全部）</option>{% for s in CONFIRMATION_STATUSES if s == '已执行已提交' %}<option value="{{ s }}" {% if request.args.get('confirmation')==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
     <input type="date" name="date_from" value="{{ request.args.get('date_from','') }}">
     <input type="date" name="date_to" value="{{ request.args.get('date_to','') }}">
     <input type="number" step="0.01" name="min_price" value="{{ request.args.get('min_price','') }}" placeholder="最低打款价">

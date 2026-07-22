@@ -368,9 +368,156 @@ def test_permission():
 # 测试五：HTML 特殊字符转义
 # ================================================================
 
+# ================================================================
+# 测试五：第三方确认页 — 仅"已执行已提交"
+# ================================================================
+
+def test_confirmation_form():
+    print("\n" + "=" * 60)
+    print("测试五：第三方确认页 — 仅已执行已提交")
+    print("=" * 60)
+
+    from app import db, seed_data, Task, StoreFlowRecord
+
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
+        seed_data()
+        task = Task.query.first()
+        task.confirmation_token = "test-token-abc123"
+        task.confirmation_status = "未确认"
+        task.confirmation_review_status = "未发起"
+        task.task_status = "进行中"
+        db.session.commit()
+        token = task.confirmation_token
+
+    client = app.test_client()
+
+    # 5.1 GET 确认页 — 验证 DOM
+    print("\n[5.1] GET 确认页 DOM 结构")
+    r = client.get(f"/confirm/{token}")
+    assert r.status_code == 200 or fail(f"GET 失败: {r.status_code}")
+    html = r.data.decode("utf-8")
+
+    # 不应有下拉菜单
+    assert '<select name="confirmation_status"' not in html or fail("不应出现状态下拉菜单")
+    ok("无状态下拉菜单")
+
+    # 应有隐藏域
+    assert 'type="hidden" name="confirmation_status" value="已执行已提交"' in html \
+        or fail("缺少隐藏域 type=hidden name=confirmation_status")
+    ok("隐藏域存在，值为已执行已提交")
+
+    # 截图 input 应有 required
+    assert 'id="confirmation_screenshot"' in html or fail("缺少截图上传控件")
+    assert 'required' in html.split('id="confirmation_screenshot"')[1].split('>')[0] \
+        or warn("截图控件可能缺少 required 属性")
+    ok("截图上传控件存在且标记 required")
+
+    # 按钮文本
+    assert "确认已执行并提交" in html or fail("按钮文本应为'确认已执行并提交'")
+    ok("按钮文本：确认已执行并提交")
+
+    # 警告始终可见（无 hidden）
+    assert "confirmWarning" not in html or "hidden" not in \
+        html.split("confirmWarning")[1].split(">")[0] if "confirmWarning" in html else True
+    ok("警告信息始终可见")
+
+    # 5.2 POST 无截图 — 应被拦截
+    print("\n[5.2] POST 无截图 — 应被拦截")
+    r = client.post(f"/confirm/{token}", data={
+        "confirmation_status": "已执行已提交",
+        "confirmation_note": "测试无截图",
+    }, follow_redirects=True)
+    html2 = r.data.decode("utf-8")
+    assert "必须上传" in html2 or fail("应提示必须上传截图")
+    ok("后端正确拦截无截图提交")
+
+    # 验证 DB 未被修改
+    with app.app_context():
+        t = db.session.get(Task, task.id)
+        assert t.confirmation_status == "未确认" or fail("状态不应被修改")
+        assert t.confirmation_submitted_at is None or fail("submit时间不应被设置")
+    ok("DB 状态未被污染")
+
+    # 5.3 POST 带截图 — 应成功提交
+    print("\n[5.3] POST 带截图 — 应成功提交")
+    import io
+    fake_png = (io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100), "test.png")
+    r = client.post(f"/confirm/{token}", data={
+        "confirmation_status": "已执行已提交",
+        "confirmation_note": "门店已完成探店并提交报告",
+        "confirmation_screenshot": fake_png,
+    }, content_type="multipart/form-data", follow_redirects=True)
+    html3 = r.data.decode("utf-8")
+    assert "提交成功" in html3 or fail(f"应提示提交成功, 实际: {html3[:500]}")
+    ok("提交成功提示显示")
+
+    # 5.4 验证 DB 状态
+    print("\n[5.4] 验证 DB 状态")
+    with app.app_context():
+        t = db.session.get(Task, task.id)
+        assert t.confirmation_status == "已执行已提交" \
+            or fail(f"confirmation_status 应为已执行已提交, 实际: {t.confirmation_status}")
+        ok("confirmation_status = 已执行已提交")
+
+        assert t.confirmation_review_status == "待核对" \
+            or fail(f"review_status 应为待核对, 实际: {t.confirmation_review_status}")
+        ok("confirmation_review_status = 待核对")
+
+        assert t.confirmation_submitted_at is not None or fail("submitted_at 不应为空")
+        ok("confirmation_submitted_at 已记录")
+
+        assert t.confirmation_note == "门店已完成探店并提交报告" \
+            or fail(f"note 不正确: {t.confirmation_note}")
+        ok("执行说明已保存")
+
+        assert t.confirmation_screenshot is not None or fail("screenshot 路径不应为空")
+        ok("截图路径已保存")
+
+        # task_status 不应变为放弃执行
+        assert t.task_status == "进行中" \
+            or fail(f"task_status 不应变化, 实际: {t.task_status}")
+        ok("task_status 保持进行中（未变为放弃执行）")
+
+    # 5.5 验证流水
+    print("\n[5.5] 验证流水记录")
+    with app.app_context():
+        flows = StoreFlowRecord.query.filter_by(task_id=task.id).all()
+        confirm_flows = [f for f in flows if "第三方门店执行确认" in (f.action or "")]
+        assert len(confirm_flows) == 1 or fail(f"应有1条确认流水, 实际: {len(confirm_flows)}")
+        assert "已执行已提交" in (confirm_flows[0].after_text or "") or fail("流水应包含'已执行已提交'")
+        assert "门店已完成探店并提交报告" in (confirm_flows[0].after_text or "") or fail("流水应包含说明")
+        ok("流水记录正确")
+
+    # 5.6 重复提交 — 应被拦截
+    print("\n[5.6] 重复提交 — 应被拦截")
+    fake_png2 = (io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100), "test2.png")
+    r = client.post(f"/confirm/{token}", data={
+        "confirmation_status": "已执行已提交",
+        "confirmation_note": "试图重复提交",
+        "confirmation_screenshot": fake_png2,
+    }, content_type="multipart/form-data", follow_redirects=True)
+    html4 = r.data.decode("utf-8")
+    assert "不能重复修改" in html4 or fail("应拦截重复提交")
+    ok("重复提交被正确拦截")
+
+    # 5.7 已提交后再 GET — 显示已提交信息
+    print("\n[5.7] 已提交后 GET 页面")
+    r = client.get(f"/confirm/{token}")
+    html5 = r.data.decode("utf-8")
+    assert "已提交" in html5 or fail("应显示已提交状态")
+    assert "门店已完成探店并提交报告" in html5 or fail("应显示之前的说明")
+    # 不应出现表单
+    assert '<form method="post"' not in html5 or fail("已提交后不应再显示表单")
+    ok("已提交后正确显示只读状态，无表单")
+
+    ok("测试五通过 ✓")
+
+
 def test_html_escaping():
     print("\n" + "=" * 60)
-    print("测试五：HTML 特殊字符转义")
+    print("测试六：HTML 特殊字符转义")
     print("=" * 60)
 
     client, task_id = setup()
@@ -401,6 +548,7 @@ def main():
         ("只填电话号码场景", test_phone_only_scenario),
         ("连续编辑稳定性", test_consecutive_saves),
         ("权限校验", test_permission),
+        ("第三方确认表单", test_confirmation_form),
         ("HTML 转义", test_html_escaping),
     ]
 

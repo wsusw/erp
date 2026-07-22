@@ -1666,26 +1666,17 @@ def confirm_execution(token):
         if task.confirmation_submitted_at:
             flash("该确认链接已提交，不能重复修改。", "warning")
             return redirect(url_for("confirm_execution", token=token))
-        status = request.form.get("confirmation_status")
-        if status not in CONFIRMATION_STATUSES or status == "未确认":
-            flash("请选择正确的执行状态", "danger")
-            return redirect(url_for("confirm_execution", token=token))
+        status = "已执行已提交"
         screenshot_path = save_upload("confirmation_screenshot", "confirmations")
-        if status == "已执行已提交" and not screenshot_path:
-            flash("选择“已执行已提交”时，必须上传 APP 端报告提交成功截图。", "danger")
+        if not screenshot_path:
+            flash("必须上传 APP 端报告提交成功截图。", "danger")
             return redirect(url_for("confirm_execution", token=token))
         before = f"确认：{task.confirmation_status}；核对：{task.confirmation_review_status}；任务：{task.task_status}"
         task.confirmation_status = status
         task.confirmation_note = request.form.get("confirmation_note", "")
         task.confirmation_screenshot = screenshot_path
         task.confirmation_submitted_at = utc_now()
-        if status == "已执行已提交":
-            task.confirmation_review_status = "待核对"
-        elif status == "放弃执行":
-            task.confirmation_review_status = "无需核对"
-            task.task_status = "放弃执行"
-        else:
-            task.confirmation_review_status = "待第三方提交"
+        task.confirmation_review_status = "待核对"
         add_flow(task, "第三方门店执行确认", before, f"{status}；说明：{task.confirmation_note}")
         db.session.commit()
         flash("提交成功。请勿重复提交，后台将根据材料进行核对。", "success")

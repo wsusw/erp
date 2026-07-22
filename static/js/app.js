@@ -100,25 +100,20 @@ function syncRichEditor(editorId, textareaId) {
 }
 
 function validateConfirmationForm() {
-  const status = document.getElementById('confirmation_status');
   const file = document.getElementById('confirmation_screenshot');
-  if (status && file && status.value === '已执行已提交' && !file.value) {
-    alert('选择“已执行已提交”时，必须上传 APP 端报告提交成功截图。');
+  if (file && !file.value) {
+    alert('必须上传 APP 端报告提交成功截图。');
     file.focus();
     return false;
   }
   return true;
 }
 
-// 增强第三方确认页体验：选择“已执行已提交”时，文件控件变为必填。
-const originalToggleConfirmWarning = window.toggleConfirmWarning;
-window.toggleConfirmWarning = function() {
-  if (typeof originalToggleConfirmWarning === 'function') originalToggleConfirmWarning();
-  const s = document.getElementById('confirmation_status');
+// 第三方确认页：截图始终必填。
+(function() {
   const file = document.getElementById('confirmation_screenshot');
-  if (!s || !file) return;
-  file.required = s.value === '已执行已提交';
-};
+  if (file) file.required = true;
+})();
 
 // 详情页查看/编辑模式切换
 function toggleSectionEdit(sectionId) {

@@ -23,20 +23,13 @@
     {% if task.confirmation_screenshot %}<a class="btn ghost full" target="_blank" href="{{ url_for('confirm_screenshot_file', token=task.confirmation_token) }}">查看已提交截图</a>{% endif %}
   {% else %}
     <form method="post" enctype="multipart/form-data" class="confirm-form" onsubmit="return validateConfirmationForm()">
-      <label>请选择执行状态</label>
-      <select name="confirmation_status" id="confirmation_status" required onchange="toggleConfirmWarning()">
-        <option value="">请选择</option>
-        <option>已执行待提交</option>
-        <option>待执行</option>
-        <option>放弃执行</option>
-        <option>已执行已提交</option>
-      </select>
-      <div id="confirmWarning" class="warning-box hidden">请确保截屏清晰可辨，截屏需包含 APP 端报告提交成功的关键信息，提交后将无法修改，请谨慎操作。</div>
+      <input type="hidden" name="confirmation_status" value="已执行已提交">
+      <div class="warning-box">请确保截屏清晰可辨，截屏需包含 APP 端报告提交成功的关键信息，提交后将无法修改，请谨慎操作。</div>
       <label>执行说明</label>
-      <textarea name="confirmation_note" rows="4" placeholder="请填写门店执行情况、遇到的问题或放弃原因"></textarea>
-      <label>APP 提交成功截图</label>
-      <input id="confirmation_screenshot" type="file" name="confirmation_screenshot" accept="image/*">
-      <button class="btn primary full">确认提交</button>
+      <textarea name="confirmation_note" rows="4" placeholder="请填写门店执行情况、遇到的问题等"></textarea>
+      <label>APP 提交成功截图 <span class="required-mark">*</span></label>
+      <input id="confirmation_screenshot" type="file" name="confirmation_screenshot" accept="image/*" required>
+      <button class="btn primary full">确认已执行并提交</button>
     </form>
   {% endif %}
 </div>
